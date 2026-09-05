@@ -109,11 +109,23 @@ function buildStepList() {
       title.append(
         Object.assign(document.createElement("span"), { className: "step-index", textContent: stepLabel(index) }),
         Object.assign(document.createElement("span"), { className: "step-name", textContent: action.name }),
-        Object.assign(document.createElement("span"), {
-          className: "step-list-price",
-          textContent: `原價 ${formatPoints(action.cost)} 點`,
-        }),
       );
+      // 讓實驗者一眼看出哪些步驟的圖片檔名有放對。
+      const stepNumber = index + 1;
+      if (window.WozImages.has(slide.step, stepNumber)) {
+        const own = window.WozImages.hasOwn(slide.step, stepNumber);
+        title.append(Object.assign(document.createElement("span"), {
+          className: "step-image-mark",
+          textContent: own ? "🖼" : "🖼·頁",
+          title: own
+            ? `有專屬圖片：${window.WozImages.get(slide.step, stepNumber)}`
+            : `沒有專屬圖片，使用整頁的預設圖：${window.WozImages.get(slide.step)}`,
+        }));
+      }
+      title.append(Object.assign(document.createElement("span"), {
+        className: "step-list-price",
+        textContent: `原價 ${formatPoints(action.cost)} 點`,
+      }));
 
       const helpRow = document.createElement("div");
       helpRow.className = "help-row";
@@ -305,3 +317,10 @@ window.WozStore.onStatus((status) => {
 
 buildPageToggle();
 window.WozStore.subscribe(applyState);
+
+// 圖片清單回來後重建一次步驟清單，把 🖼 記號補上。
+window.WozImages.onLoad(() => {
+  renderedIndex = -1;
+  if (window.WozStore.state) applyState(window.WozStore.state);
+});
+window.WozImages.load();

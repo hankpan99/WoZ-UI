@@ -14,15 +14,22 @@ import argparse
 import datetime
 import json
 import queue
+import re
 import socket
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import quote
 
 import state as woz_state
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SESSIONS_DIR = PROJECT_ROOT / "sessions"
+STEP_IMAGE_DIR = PROJECT_ROOT / "images" / "steps"
+STEP_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
+# 檔名格式：<頁>-<步驟>（例如 3-2、03-02）＝第 3 頁第 2 個步驟；
+# 只寫 <頁>（例如 3）＝整頁的預設圖，該頁沒有指定圖的步驟都用它。
+STEP_IMAGE_NAME = re.compile(r"^(\d+)(?:[-_](\d+))?$")
 # SSE 沒有訊息時多久送一次 keepalive 註解（順便偵測已斷線的連線）。
 KEEPALIVE_SECONDS = 15
 
@@ -59,6 +66,29 @@ def broadcast(snapshot):
     payload = json.dumps(snapshot, ensure_ascii=False)
     for subscriber in list(_subscribers):
         subscriber.put(payload)
+
+
+def scan_step_images():
+    """掃描 images/steps/，把檔名換算成 "頁-步驟" → 網址。
+
+    每次請求都重新掃描，所以加了圖片只要重整瀏覽器，不用重啟 server。
+    """
+    images = {}
+    if not STEP_IMAGE_DIR.is_dir():
+        return images
+
+    for path in sorted(STEP_IMAGE_DIR.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in STEP_IMAGE_EXTENSIONS:
+            continue
+        match = STEP_IMAGE_NAME.match(path.stem)
+        if not match:
+            continue
+        page, step = match.group(1), match.group(2)
+        # 去掉補零，3-2 與 03-02 視為同一個。
+        key = str(int(page)) if step is None else f"{int(page)}-{int(step)}"
+        images[key] = f"/images/steps/{quote(path.name)}"
+
+    return images
 
 
 def local_ip():
@@ -100,6 +130,8 @@ class WozHandler(SimpleHTTPRequestHandler):
             with _lock:
                 snapshot = dict(_state)
             self.send_json(snapshot)
+        elif self.path.startswith("/api/images"):
+            self.send_json({"images": scan_step_images()})
         else:
             super().do_GET()
 

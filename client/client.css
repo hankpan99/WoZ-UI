@@ -57,6 +57,11 @@
   --step-index-size: 1.2rem;
   --cost-size: 1.5rem;
   --action-gap: 16px;
+  /* 步驟圖片版位：佔左側面板的高度比例，其餘給「詳細步驟」。
+     --step-image-fit 用 contain 完整顯示整張圖（不裁切，兩側可能留空），
+     改成 cover 則會填滿版位但裁掉超出的部分。 */
+  --preview-image-height: 50%;
+  --step-image-fit: contain;
   --detail-title-size: 1.35rem;
   --detail-text-size: 1.2rem;
   --detail-columns: 2;
@@ -267,9 +272,9 @@ button { color: inherit; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
 .action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
-.preview-panel { display: grid; grid-template-rows: 42% minmax(0, 58%); min-height: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: var(--panel-bg); }
+.preview-panel { display: grid; grid-template-rows: var(--preview-image-height) minmax(0, 1fr); min-height: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: var(--panel-bg); }
 .image-slot { position: relative; height: 100%; min-height: 0; margin: 0; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--neutral-tint); }
-.image-slot img { width: 100%; height: 100%; object-fit: cover; }
+.image-slot img { width: 100%; height: 100%; object-fit: var(--step-image-fit); }
 .image-placeholder { display: grid; place-items: center; align-content: center; height: 100%; color: var(--placeholder-text); font-size: .74rem; letter-spacing: .05em; }
 .image-placeholder[hidden] { display: none; }
 .image-placeholder p { margin: 10px 0 0; }

@@ -1,7 +1,9 @@
 // 參與者畫面。狀態全部來自 server（見 shared/store.js）：
 // 這一頁只負責顯示，勾選與點數都由 wizard 控制台決定。
-// 將圖片放進 images 資料夾後，在此依 Excel 的步驟編號指定路徑。
-// 例如："1": "/images/step-01.jpg", "X": "/images/check-cake.jpg"
+// 步驟圖片平常不用寫在這裡：把檔案命名成「頁-步驟」丟進 images/steps/ 即可
+// （例如 images/steps/3-2.jpg ＝ 第 3 頁第 2 個步驟）。
+// 這裡只用來寫例外，key 的寫法一樣，會蓋過 images/steps/ 掃到的檔案。
+// 例如：{ "3-2": "/images/special/whisk.jpg", "5": "/images/clean.jpg" }
 const STEP_IMAGES = {};
 const MEAL_ICONS = [
   { keyword: "巴斯克蛋糕", src: "/images/icon/cake.png", alt: "巴斯克蛋糕" },
@@ -45,6 +47,8 @@ let renderedIndex = -1;
 let scrolledStepIndex = -1;
 // 上一次看到的 scrollNonce；null 代表還沒收到第一份狀態。
 let lastScrollNonce = null;
+// 目前預覽中的步驟（滑鼠移入的那個，或現在該做的那一步）。
+let previewIndex = 0;
 let doneKeys = new Set();
 let helpedKeys = new Set();
 
@@ -83,7 +87,39 @@ function currentStepIndex() {
   return index === -1 ? actions.length : index;
 }
 
-function renderDetails(action) {
+// 找某個步驟要用的圖：先看 STEP_IMAGES 的例外設定（步驟優先於整頁），
+// 再看 images/steps/ 掃到的檔案，最後才是 Excel 帶進來的 slide.image。
+function imageFor(actionIndex) {
+  const slide = slides[currentIndex];
+  if (!slide) return "";
+  const stepNumber = actionIndex + 1;
+  return STEP_IMAGES[`${slide.step}-${stepNumber}`]
+    || STEP_IMAGES[slide.step]
+    || window.WozImages.get(slide.step, stepNumber)
+    || slide.image
+    || "";
+}
+
+function showImage(actionIndex) {
+  const slide = slides[currentIndex];
+  const path = imageFor(actionIndex);
+  if (path) {
+    const label = cleanLabel(slide?.meal) || cleanLabel(slide?.stage) || "";
+    elements.stepImage.src = path;
+    elements.stepImage.alt = `${label}步驟示意圖`;
+    elements.stepImage.hidden = false;
+    elements.imagePlaceholder.hidden = true;
+  } else {
+    elements.stepImage.removeAttribute("src");
+    elements.stepImage.hidden = true;
+    elements.imagePlaceholder.hidden = false;
+  }
+}
+
+// 顯示某個步驟的詳細步驟與圖片。
+function showStep(actionIndex) {
+  previewIndex = actionIndex;
+  const action = slides[currentIndex]?.actions[actionIndex];
   elements.detailList.replaceChildren(
     ...(action?.details || []).map((detail) => {
       const item = document.createElement("li");
@@ -91,24 +127,24 @@ function renderDetails(action) {
       return item;
     }),
   );
+  showImage(actionIndex);
 }
 
-// 滑鼠沒有停在任何步驟上時，詳細步驟要顯示的那一個。
-// 整頁都完成時就停在最後一步，不留白。
-function pinnedAction() {
+// 滑鼠沒有停在任何步驟上時要顯示的那一個。整頁都完成時停在最後一步，不留白。
+function pinnedIndex() {
   const actions = slides[currentIndex]?.actions || [];
-  return actions[Math.min(currentStepIndex(), actions.length - 1)];
+  return Math.max(0, Math.min(currentStepIndex(), actions.length - 1));
 }
 
 // 顏色高亮（底色＋左側直條）固定在現在該做的那一步，不會被滑鼠影響；
-// 移入其他步驟只會預覽它的詳細步驟。
+// 移入其他步驟只會預覽它的詳細步驟與圖片。
 function highlightCurrentStep() {
   const actions = slides[currentIndex]?.actions || [];
   const stepIndex = currentStepIndex();
   // 整頁都完成時就不再高亮。
   const highlightIndex = stepIndex < actions.length ? stepIndex : -1;
 
-  renderDetails(pinnedAction());
+  showStep(pinnedIndex());
   [...elements.actionList.children].forEach((button, buttonIndex) => {
     button.classList.toggle("active", buttonIndex === highlightIndex);
   });
@@ -158,7 +194,7 @@ function renderActions(slide) {
     // 所以不能用 disabled（disabled 的按鈕不會觸發滑鼠事件）。
     button.tabIndex = -1;
     button.className = "action-card";
-    button.addEventListener("mouseenter", () => renderDetails(action));
+    button.addEventListener("mouseenter", () => showStep(index));
     button.classList.toggle("done", doneKeys.has(key));
     button.classList.toggle("helped", helpedKeys.has(key));
 
@@ -235,17 +271,6 @@ function render() {
   highlightCurrentStep();
   autoScroll(true);
 
-  const imagePath = STEP_IMAGES[slide.step] || slide.image;
-  if (imagePath) {
-    elements.stepImage.src = imagePath;
-    elements.stepImage.alt = `${mealName || stageName}步驟示意圖`;
-    elements.stepImage.hidden = false;
-    elements.imagePlaceholder.hidden = true;
-  } else {
-    elements.stepImage.hidden = true;
-    elements.imagePlaceholder.hidden = false;
-  }
-
   elements.prevButton.disabled = currentIndex === 0;
   elements.nextButton.disabled = currentIndex === slides.length - 1;
   elements.nextButton.innerHTML = currentIndex === slides.length - 1
@@ -282,8 +307,13 @@ function moveSlide(direction) {
   window.WozStore.dispatch({ type: "setPage", index: nextIndex });
 }
 
-// 滑鼠離開整個列表就把詳細步驟切回現在該做的那一步。
-elements.actionList.addEventListener("mouseleave", () => renderDetails(pinnedAction()));
+// 滑鼠離開整個列表就切回現在該做的那一步。
+elements.actionList.addEventListener("mouseleave", () => showStep(pinnedIndex()));
+// 圖片壞掉（檔名對但檔案有問題）時退回預留版位，不要留一個破圖。
+elements.stepImage.addEventListener("error", () => {
+  elements.stepImage.hidden = true;
+  elements.imagePlaceholder.hidden = false;
+});
 elements.actionList.addEventListener("scroll", updateScrollCue, { passive: true });
 window.addEventListener("resize", updateScrollCue);
 elements.scrollCue.addEventListener("click", () => {
@@ -322,3 +352,7 @@ window.WozStore.subscribe(applyState);
 
 // 還沒收到第一份狀態前先畫一次，避免畫面空白。
 render();
+
+// 圖片清單晚一點才回來，回來後把目前預覽中的那張補上。
+window.WozImages.onLoad(() => showImage(previewIndex));
+window.WozImages.load();
