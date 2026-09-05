@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Extract the recipe slide data from the source workbook without dependencies."""
+
+import json
+import re
+import unicodedata
+from collections import OrderedDict
+from pathlib import Path
+from xml.etree.ElementTree import fromstring, iterparse
+from zipfile import ZipFile
+
+try:
+    from prettytable import PrettyTable
+except ModuleNotFoundError:
+    PrettyTable = None
+
+
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "data"
+SOURCE = DATA_DIR / "User Study v3.xlsx"
+OUTPUT = DATA_DIR / "recipe-data.js"
+SHEET_NAME = "食譜excel v2"
+NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+
+def worksheet_path(archive):
+    workbook = fromstring(archive.read("xl/workbook.xml"))
+    relations = fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    targets = {relation.get("Id"): relation.get("Target") for relation in relations}
+
+    for sheet in workbook.find(NS + "sheets"):
+        if sheet.get("name") != SHEET_NAME:
+            continue
+        target = targets[sheet.get(DOC_REL_NS + "id")]
+        return target.lstrip("/") if target.startswith("/") else f"xl/{target}"
+
+    raise ValueError(f"找不到工作表：{SHEET_NAME}")
+
+
+def cell_values(archive, sheet_path):
+    shared_root = fromstring(archive.read("xl/sharedStrings.xml"))
+    shared = [
+        "".join(node.text or "" for node in item.iter(NS + "t"))
+        for item in shared_root.findall(NS + "si")
+    ]
+
+    for _, row in iterparse(archive.open(sheet_path), events=("end",)):
+        if row.tag != NS + "row":
+            continue
+
+        values = {}
+        for cell in row.findall(NS + "c"):
+            match = re.match(r"[A-Z]+", cell.get("r", ""))
+            if not match:
+                continue
+
+            column = match.group(0)
+            value_node = cell.find(NS + "v")
+            cell_type = cell.get("t")
+
+            if cell_type == "s" and value_node is not None:
+                value = shared[int(value_node.text)]
+            elif cell_type == "inlineStr":
+                value = "".join(
+                    node.text or "" for node in cell.iter(NS + "t")
+                )
+            else:
+                value = value_node.text if value_node is not None else ""
+
+            values[column] = value.strip() if isinstance(value, str) else value
+
+        yield values
+        row.clear()
+
+
+def extract():
+    slides = []
+    current_meal = ""
+    current_slide = None
+    current_action = None
+
+    with ZipFile(SOURCE) as archive:
+        rows = iter(cell_values(archive, worksheet_path(archive)))
+        header = next(rows)
+        columns = {value: column for column, value in header.items()}
+        required = ("餐點", "階段", "花費", "步驟名稱", "步驟內容")
+        missing = [name for name in required if name not in columns]
+        if missing:
+            raise ValueError(f"缺少必要欄位：{', '.join(missing)}")
+
+        for row in rows:
+            meal = row.get(columns["餐點"], "")
+            stage = row.get(columns["階段"], "")
+
+            if meal:
+                current_meal = meal
+
+            # 「餐點」或「階段」任一欄出現值，就開始新的一頁。
+            # 同一列兩欄都有值時，仍合併為同一頁。
+            if meal or stage:
+                current_slide = {
+                    "step": str(len(slides) + 1),
+                    "meal": current_meal,
+                    "stage": stage,
+                    "actions": [],
+                    "image": "",
+                }
+                slides.append(current_slide)
+                current_action = None
+
+            if current_slide is None:
+                continue
+
+            action_name = row.get(columns["步驟名稱"], "")
+            if action_name:
+                raw_cost = row.get(columns["花費"], "")
+                cost_match = re.search(r"\d+(?:\.\d+)?", raw_cost)
+                current_action = {
+                    "name": action_name.replace("\n", " "),
+                    "cost": float(cost_match.group()) if cost_match else 0,
+                    "details": [],
+                }
+                if current_action["cost"] != 0 and current_action["cost"].is_integer():
+                    current_action["cost"] = int(current_action["cost"])
+                current_slide["actions"].append(current_action)
+
+            detail = row.get(columns["步驟內容"], "")
+            if current_action is not None and detail:
+                current_action["details"].append(
+                    " ".join(detail.split())
+                )
+
+    return slides
+
+
+def format_cost(value):
+    return f"${value:g}"
+
+
+def display_width(value):
+    return sum(
+        2 if unicodedata.east_asian_width(character) in ("W", "F", "A") else 1
+        for character in str(value)
+    )
+
+
+def fallback_pretty_table(headers, rows):
+    """Render an aligned ASCII table when prettytable is not installed."""
+    widths = [
+        max(display_width(header), *(display_width(row[index]) for row in rows))
+        for index, header in enumerate(headers)
+    ]
+
+    def border():
+        return "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+
+    def table_row(values):
+        cells = []
+        for value, width in zip(values, widths):
+            text = str(value)
+            cells.append(f" {text}{' ' * (width - display_width(text))} ")
+        return "|" + "|".join(cells) + "|"
+
+    lines = [border(), table_row(headers), border()]
+    lines.extend(table_row(row) for row in rows)
+    lines.append(border())
+    return "\n".join(lines)
+
+
+def print_cost_summary(slides):
+    totals = OrderedDict()
+    for slide in slides:
+        category = f"{slide['meal']} - {slide['stage']}"
+        totals[category] = totals.get(category, 0) + sum(
+            action["cost"] for action in slide["actions"]
+        )
+
+    rows = [[category, format_cost(cost)] for category, cost in totals.items()]
+    headers = ["類別", "總花費"]
+
+    print(f"\n{SHEET_NAME}：各類別總花費")
+    if PrettyTable is not None:
+        table = PrettyTable()
+        table.field_names = headers
+        table.align["類別"] = "l"
+        table.align["總花費"] = "r"
+        table.add_rows(rows)
+        print(table)
+    else:
+        print(fallback_pretty_table(headers, rows))
+
+
+if __name__ == "__main__":
+    DATA_DIR.mkdir(exist_ok=True)
+    slides = extract()
+    data = json.dumps(slides, ensure_ascii=False, indent=2)
+    OUTPUT.write_text(
+        f"// Generated from User Study v3.xlsx ({SHEET_NAME}). Run scripts/extract_recipe.py to refresh.\n"
+        f"window.RECIPE_SLIDES = {data};\n",
+        encoding="utf-8",
+    )
+    print(f"Wrote {OUTPUT.name}")
+    print_cost_summary(slides)

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f4" />
+    <title>實體實驗食譜</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="stats" aria-label="料理進度">
+        <div class="fullscreen-card">
+          <button class="fullscreen-button" id="fullscreen-button" type="button">
+            <span class="fullscreen-icon" aria-hidden="true">⛶</span>
+            <span id="fullscreen-label">全螢幕</span>
+          </button>
+        </div>
+        <article class="stat-card">
+          <span class="stat-label">剩餘步驟所需花費點數</span>
+          <strong class="stat-value"><span id="remaining-cost">0</span><small> 點</small></strong>
+        </article>
+        <article class="stat-card accent">
+          <span class="stat-label">剩餘點數</span>
+          <strong class="stat-value"><span id="remaining-points">0</span><small> 點</small></strong>
+        </article>
+        <article class="stat-card step-card">
+          <div class="stat-copy">
+            <span class="stage-title">
+              <span class="meal-label" id="top-meal"></span>
+              <span class="stat-label" id="top-stage"></span>
+            </span>
+            <span class="stage-hint">本階段已完成步驟</span>
+          </div>
+          <strong class="stat-value"><span id="stage-done">0</span><small id="stage-total"> / 0</small></strong>
+          <div class="meal-icon-wrap" id="meal-icon-wrap" hidden>
+            <img class="meal-icon" id="meal-icon" alt="" />
+          </div>
+        </article>
+      </section>
+
+      <section class="recipe-stage" aria-live="polite">
+        <div class="slide-layout">
+          <aside class="preview-panel" id="preview-panel">
+            <figure class="image-slot" id="image-slot">
+              <img id="step-image" alt="" hidden />
+              <div class="image-placeholder" id="image-placeholder" aria-hidden="true">
+                <div class="plate-art"><span></span></div>
+                <p>此處可放步驟圖片</p>
+              </div>
+            </figure>
+            <div class="detail-panel">
+              <h2>詳細步驟</h2>
+              <ol id="detail-list"></ol>
+            </div>
+          </aside>
+
+          <div class="action-column" id="action-column">
+            <div class="action-list" id="action-list"></div>
+            <button class="scroll-cue" id="scroll-cue" type="button" aria-label="捲動查看下方步驟">
+              <span aria-hidden="true">▼</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <nav class="slide-nav" aria-label="切換料理步驟">
+        <button class="nav-button secondary" id="prev-button" type="button">
+          <span aria-hidden="true">←</span> 上一步
+        </button>
+        <div class="nav-progress" aria-label="料理進度">
+          <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
+          <span class="progress-count"><span id="current-step">1</span><small id="step-total"> / 20</small></span>
+        </div>
+        <button class="nav-button primary" id="next-button" type="button">
+          下一步 <span aria-hidden="true">→</span>
+        </button>
+      </nav>
+    </main>
+
+    <script src="data/recipe-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
