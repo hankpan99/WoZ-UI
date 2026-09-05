@@ -1,13 +1,17 @@
-const STARTING_POINTS = 100;
+// 參與者畫面。狀態全部來自 server（見 shared/store.js）：
+// 這一頁只負責顯示，勾選與點數都由 wizard 控制台決定。
 // 將圖片放進 images 資料夾後，在此依 Excel 的步驟編號指定路徑。
-// 例如："1": "images/step-01.jpg", "X": "images/check-cake.jpg"
+// 例如："1": "/images/step-01.jpg", "X": "/images/check-cake.jpg"
 const STEP_IMAGES = {};
 const MEAL_ICONS = [
-  { keyword: "巴斯克蛋糕", src: "images/icon/cake.png", alt: "巴斯克蛋糕" },
-  { keyword: "吐司", src: "images/icon/toast.png", alt: "法式吐司" },
-  { keyword: "優格", src: "images/icon/yogurt.png", alt: "水果優格" },
+  { keyword: "巴斯克蛋糕", src: "/images/icon/cake.png", alt: "巴斯克蛋糕" },
+  { keyword: "吐司", src: "/images/icon/toast.png", alt: "法式吐司" },
+  { keyword: "優格", src: "/images/icon/yogurt.png", alt: "水果優格" },
 ];
 const slides = window.RECIPE_SLIDES || [];
+// 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
+const MAX_DONE_ABOVE = 2;
+const { actionKey, formatPoints, cleanLabel, slideCost } = window.WozFormat;
 
 const elements = {
   remainingCost: document.querySelector("#remaining-cost"),
@@ -31,42 +35,28 @@ const elements = {
   nextButton: document.querySelector("#next-button"),
   fullscreenButton: document.querySelector("#fullscreen-button"),
   fullscreenLabel: document.querySelector("#fullscreen-label"),
+  offlineBanner: document.querySelector("#offline-banner"),
 };
 
 let currentIndex = 0;
-let activeActionIndex = 0;
-// 參與者點過的步驟（含 0 點的步驟），用來計算「本階段已完成步驟」與扣點。
-const doneActions = new Set();
-
-const slideCost = (slide) =>
-  slide.actions.reduce((total, action) => total + action.cost, 0);
-
-const formatPoints = (value) =>
-  new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 1 }).format(value);
-
-const actionKey = (slideIndex, actionIndex) => `${slideIndex}:${actionIndex}`;
-
-// Excel 沒有餐點時會填 "-"，畫面上直接留白。
-const cleanLabel = (value) => {
-  const text = (value || "").trim();
-  return text === "-" || text === "—" ? "" : text;
-};
-
-function chargedCost() {
-  return [...doneActions].reduce((total, key) => {
-    const [slideIndex, actionIndex] = key.split(":").map(Number);
-    return total + (slides[slideIndex]?.actions[actionIndex]?.cost || 0);
-  }, 0);
-}
+// 上一次真正重繪過的頁碼，用來判斷這次更新要不要整頁重畫。
+let renderedIndex = -1;
+// 上一次自動捲動時對準的步驟，避免只是點數變動也把畫面拉走。
+let scrolledStepIndex = -1;
+// 上一次看到的 scrollNonce；null 代表還沒收到第一份狀態。
+let lastScrollNonce = null;
+let doneKeys = new Set();
+let helpedKeys = new Set();
 
 function updateRemainingPoints() {
-  elements.remainingPoints.textContent = formatPoints(STARTING_POINTS - chargedCost());
+  const remaining = window.WozStore.state?.remaining;
+  elements.remainingPoints.textContent = remaining == null ? "—" : formatPoints(remaining);
 }
 
 function updateStageProgress() {
   const total = slides[currentIndex]?.actions.length || 0;
   const done = slides[currentIndex]?.actions.reduce(
-    (count, _action, index) => count + (doneActions.has(actionKey(currentIndex, index)) ? 1 : 0),
+    (count, _action, index) => count + (doneKeys.has(actionKey(currentIndex, index)) ? 1 : 0),
     0,
   ) || 0;
 
@@ -83,33 +73,94 @@ function updateScrollCue() {
   elements.actionColumn.classList.toggle("scroll-below", hasMoreBelow);
 }
 
-function showAction(index) {
-  const action = slides[currentIndex].actions[index];
-  if (!action) return;
+// 這一頁「還沒完成、編號最小」的步驟＝現在該做的那一步。
+// 全部完成時回傳 actions.length。
+function currentStepIndex() {
+  const actions = slides[currentIndex]?.actions || [];
+  const index = actions.findIndex(
+    (_action, position) => !doneKeys.has(actionKey(currentIndex, position)),
+  );
+  return index === -1 ? actions.length : index;
+}
 
-  activeActionIndex = index;
+function renderDetails(action) {
   elements.detailList.replaceChildren(
-    ...action.details.map((detail) => {
+    ...(action?.details || []).map((detail) => {
       const item = document.createElement("li");
       item.textContent = detail;
       return item;
     }),
   );
+}
 
+// 滑鼠沒有停在任何步驟上時，詳細步驟要顯示的那一個。
+// 整頁都完成時就停在最後一步，不留白。
+function pinnedAction() {
+  const actions = slides[currentIndex]?.actions || [];
+  return actions[Math.min(currentStepIndex(), actions.length - 1)];
+}
+
+// 顏色高亮（底色＋左側直條）固定在現在該做的那一步，不會被滑鼠影響；
+// 移入其他步驟只會預覽它的詳細步驟。
+function highlightCurrentStep() {
+  const actions = slides[currentIndex]?.actions || [];
+  const stepIndex = currentStepIndex();
+  // 整頁都完成時就不再高亮。
+  const highlightIndex = stepIndex < actions.length ? stepIndex : -1;
+
+  renderDetails(pinnedAction());
   [...elements.actionList.children].forEach((button, buttonIndex) => {
-    const selected = buttonIndex === index;
-    button.classList.toggle("active", selected);
-    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("active", buttonIndex === highlightIndex);
   });
+}
+
+// 讓現在該做的那一步上方最多只留 MAX_DONE_ABOVE 個已完成的步驟。
+function scrollToCurrentStep() {
+  const list = elements.actionList;
+  const target = list.children[Math.max(0, currentStepIndex() - MAX_DONE_ABOVE)];
+  if (!target) return;
+
+  // 用 rect 相減，不必在意 offsetParent 是誰。
+  const delta = target.getBoundingClientRect().top - list.getBoundingClientRect().top;
+  if (Math.abs(delta) < 1) return;
+  list.scrollTo({ top: list.scrollTop + delta, behavior: "smooth" });
+}
+
+// 只有「該做的那一步」真的換人時才捲動，單純的點數變動不會把畫面拉走。
+function autoScroll(force) {
+  const stepIndex = currentStepIndex();
+  if (!force && stepIndex === scrolledStepIndex) return;
+  scrolledStepIndex = stepIndex;
+  requestAnimationFrame(scrollToCurrentStep);
+}
+
+// 只有「接受幫助」的步驟才有這顆標記；同時已完成時，
+// 既有的 .action-card.done > * 規則會自動把它一起灰階。
+function syncHelpBadge(button, helped) {
+  const existing = button.querySelector(".help-badge");
+  if (helped === Boolean(existing)) return;
+  if (helped) {
+    const badge = document.createElement("span");
+    badge.className = "help-badge";
+    badge.textContent = "🤖 已協助";
+    button.append(badge);
+  } else {
+    existing.remove();
+  }
 }
 
 function renderActions(slide) {
   const buttons = slide.actions.map((action, index) => {
+    const key = actionKey(currentIndex, index);
     const button = document.createElement("button");
     button.type = "button";
+    // 不能點、不吃鍵盤焦點，但仍要收得到 mouseenter 才能預覽詳細步驟，
+    // 所以不能用 disabled（disabled 的按鈕不會觸發滑鼠事件）。
+    button.tabIndex = -1;
     button.className = "action-card";
-    button.setAttribute("aria-pressed", "false");
-    button.classList.toggle("done", doneActions.has(actionKey(currentIndex, index)));
+    button.addEventListener("mouseenter", () => renderDetails(action));
+    button.classList.toggle("done", doneKeys.has(key));
+    button.classList.toggle("helped", helpedKeys.has(key));
 
     const number = document.createElement("span");
     number.className = "action-number";
@@ -126,22 +177,28 @@ function renderActions(slide) {
       cost.textContent = `${formatPoints(action.cost)} 點`;
       button.append(cost);
     }
-
-    button.addEventListener("mouseenter", () => showAction(index));
-    button.addEventListener("focus", () => showAction(index));
-    button.addEventListener("click", () => {
-      showAction(index);
-      doneActions.add(actionKey(currentIndex, index));
-      button.classList.add("done");
-      updateRemainingPoints();
-      updateStageProgress();
-    });
+    syncHelpBadge(button, helpedKeys.has(key));
     return button;
   });
 
   elements.actionList.replaceChildren(...buttons);
   elements.actionList.scrollTop = 0;
   requestAnimationFrame(updateScrollCue);
+}
+
+// 只有勾選狀態變動時走這裡：就地改 class，不動 DOM 結構，
+// 這樣參與者的捲動位置與滑鼠停留的卡片都不會被彈掉。
+function syncActionStates() {
+  [...elements.actionList.children].forEach((button, index) => {
+    const key = actionKey(currentIndex, index);
+    button.classList.toggle("done", doneKeys.has(key));
+    button.classList.toggle("helped", helpedKeys.has(key));
+    syncHelpBadge(button, helpedKeys.has(key));
+  });
+  updateRemainingPoints();
+  updateStageProgress();
+  highlightCurrentStep();
+  autoScroll(false);
 }
 
 function render() {
@@ -175,7 +232,8 @@ function render() {
   }
 
   renderActions(slide);
-  showAction(Math.min(activeActionIndex, slide.actions.length - 1));
+  highlightCurrentStep();
+  autoScroll(true);
 
   const imagePath = STEP_IMAGES[slide.step] || slide.image;
   if (imagePath) {
@@ -193,16 +251,39 @@ function render() {
   elements.nextButton.innerHTML = currentIndex === slides.length - 1
     ? '已完成 <span aria-hidden="true">✓</span>'
     : '下一步 <span aria-hidden="true">→</span>';
+
+  renderedIndex = currentIndex;
+}
+
+function applyState(state) {
+  doneKeys = new Set(state.done);
+  helpedKeys = new Set(Object.keys(state.helped || {}));
+
+  // wizard 按「捲回目前步驟」時 server 會把這個號碼 +1。
+  const nonce = state.scrollNonce ?? 0;
+  const recenterRequested = lastScrollNonce !== null && nonce !== lastScrollNonce;
+  lastScrollNonce = nonce;
+
+  currentIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
+
+  if (currentIndex !== renderedIndex) {
+    render();
+  } else {
+    syncActionStates();
+  }
+
+  if (recenterRequested) autoScroll(true);
 }
 
 function moveSlide(direction) {
   const nextIndex = Math.max(0, Math.min(slides.length - 1, currentIndex + direction));
   if (nextIndex === currentIndex) return;
-  currentIndex = nextIndex;
-  activeActionIndex = 0;
-  render();
+  // 換頁一樣寫回 server，wizard 的頁面切換器才會跟著動。
+  window.WozStore.dispatch({ type: "setPage", index: nextIndex });
 }
 
+// 滑鼠離開整個列表就把詳細步驟切回現在該做的那一步。
+elements.actionList.addEventListener("mouseleave", () => renderDetails(pinnedAction()));
 elements.actionList.addEventListener("scroll", updateScrollCue, { passive: true });
 window.addEventListener("resize", updateScrollCue);
 elements.scrollCue.addEventListener("click", () => {
@@ -234,4 +315,10 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "ArrowRight") moveSlide(1);
 });
 
+window.WozStore.onStatus((status) => {
+  elements.offlineBanner.hidden = status !== "disconnected";
+});
+window.WozStore.subscribe(applyState);
+
+// 還沒收到第一份狀態前先畫一次，避免畫面空白。
 render();

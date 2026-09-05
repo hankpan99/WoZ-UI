@@ -4,81 +4,68 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f7f7f4" />
-    <title>實體實驗食譜</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>WoZ 實驗系統</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #20221f;
+        --muted: #777b73;
+        --line: #e6e7e1;
+        --soft: #f7f7f4;
+        --white: #fff;
+        --blue: #425d4a;
+        --blue-light: #e9efe9;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body { display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 24px; color: var(--ink); background: var(--soft); }
+      main { width: min(720px, 100%); }
+      h1 { margin: 0 0 6px; font-size: 1.6rem; }
+      .lede { margin: 0 0 28px; color: var(--muted); }
+      .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+      .link-card {
+        display: grid;
+        gap: 6px;
+        padding: 24px;
+        color: inherit;
+        text-decoration: none;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--white);
+        box-shadow: 0 6px 20px rgba(34, 40, 30, .06);
+        transition: transform .15s ease, border-color .15s ease;
+      }
+      .link-card:hover { border-color: var(--blue); transform: translateY(-3px); }
+      .link-icon { font-size: 1.8rem; line-height: 1; }
+      .link-title { font-size: 1.2rem; font-weight: 750; }
+      .link-desc { color: var(--muted); font-size: .92rem; line-height: 1.5; }
+      .hint { margin-top: 28px; padding: 16px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--blue-light); color: var(--blue); font-size: .92rem; line-height: 1.7; }
+      .hint strong { display: block; margin-bottom: 4px; }
+      code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .7); }
+    </style>
   </head>
   <body>
-    <main class="app-shell">
-      <section class="stats" aria-label="料理進度">
-        <div class="fullscreen-card">
-          <button class="fullscreen-button" id="fullscreen-button" type="button">
-            <span class="fullscreen-icon" aria-hidden="true">⛶</span>
-            <span id="fullscreen-label">全螢幕</span>
-          </button>
-        </div>
-        <article class="stat-card">
-          <span class="stat-label">剩餘步驟所需花費點數</span>
-          <strong class="stat-value"><span id="remaining-cost">0</span><small> 點</small></strong>
-        </article>
-        <article class="stat-card accent">
-          <span class="stat-label">剩餘點數</span>
-          <strong class="stat-value"><span id="remaining-points">0</span><small> 點</small></strong>
-        </article>
-        <article class="stat-card step-card">
-          <div class="stat-copy">
-            <span class="stage-title">
-              <span class="meal-label" id="top-meal"></span>
-              <span class="stat-label" id="top-stage"></span>
-            </span>
-            <span class="stage-hint">本階段已完成步驟</span>
-          </div>
-          <strong class="stat-value"><span id="stage-done">0</span><small id="stage-total"> / 0</small></strong>
-          <div class="meal-icon-wrap" id="meal-icon-wrap" hidden>
-            <img class="meal-icon" id="meal-icon" alt="" />
-          </div>
-        </article>
-      </section>
+    <main>
+      <h1>WoZ 實驗系統</h1>
+      <p class="lede">在這台電腦開參與者畫面，在自己的視窗開控制台；兩邊即時同步。</p>
 
-      <section class="recipe-stage" aria-live="polite">
-        <div class="slide-layout">
-          <aside class="preview-panel" id="preview-panel">
-            <figure class="image-slot" id="image-slot">
-              <img id="step-image" alt="" hidden />
-              <div class="image-placeholder" id="image-placeholder" aria-hidden="true">
-                <div class="plate-art"><span></span></div>
-                <p>此處可放步驟圖片</p>
-              </div>
-            </figure>
-            <div class="detail-panel">
-              <h2>詳細步驟</h2>
-              <ol id="detail-list"></ol>
-            </div>
-          </aside>
+      <div class="links">
+        <a class="link-card" href="/client/">
+          <span class="link-icon" aria-hidden="true">🍳</span>
+          <span class="link-title">參與者畫面</span>
+          <span class="link-desc">給參與者看的食譜頁。放到外接螢幕後按「全螢幕」。</span>
+        </a>
+        <a class="link-card" href="/wizard/">
+          <span class="link-icon" aria-hidden="true">🎛️</span>
+          <span class="link-title">Wizard 控制台</span>
+          <span class="link-desc">切換頁面、勾選步驟、調整點數與回溯。</span>
+        </a>
+      </div>
 
-          <div class="action-column" id="action-column">
-            <div class="action-list" id="action-list"></div>
-            <button class="scroll-cue" id="scroll-cue" type="button" aria-label="捲動查看下方步驟">
-              <span aria-hidden="true">▼</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <nav class="slide-nav" aria-label="切換料理步驟">
-        <button class="nav-button secondary" id="prev-button" type="button">
-          <span aria-hidden="true">←</span> 上一步
-        </button>
-        <div class="nav-progress" aria-label="料理進度">
-          <div class="progress-track" aria-hidden="true"><span id="progress-bar"></span></div>
-          <span class="progress-count"><span id="current-step">1</span><small id="step-total"> / 20</small></span>
-        </div>
-        <button class="nav-button primary" id="next-button" type="button">
-          下一步 <span aria-hidden="true">→</span>
-        </button>
-      </nav>
+      <p class="hint">
+        <strong>要用兩台電腦時</strong>
+        另一台連 server 啟動時印出的區網網址（例如 <code>http://192.168.0.12:8000/client/</code>），兩台必須在同一個區域網路下。
+      </p>
     </main>
-
-    <script src="data/recipe-data.js"></script>
-    <script src="app.js"></script>
   </body>
 </html>

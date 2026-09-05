@@ -1,0 +1,290 @@
+:root {
+  color-scheme: light;
+  /* 沿用參與者畫面的配色，但這一頁是給實驗者看的，密度高很多。 */
+  --ink: #20221f;
+  --muted: #777b73;
+  --line: #e6e7e1;
+  --soft: #f7f7f4;
+  --white: #ffffff;
+  --panel-bg: #fafaf8;
+  --blue: #425d4a;
+  --blue-light: #e9efe9;
+  --blue-accent: #ce7144;
+  --cost-text: #9d4e2d;
+  --cost-bg: #fbede6;
+  --helped-border: #d99b1c;
+  --helped-bg: #fdf6e6;
+  --helped-badge-text: #8a5c00;
+  --done-bg: #f0f1ed;
+  --plus: #2f6b46;
+  --minus: #b3372c;
+  --offline-ink: #ffffff;
+  --offline-bg: #b3372c;
+  --shadow: rgba(34, 40, 30, .07);
+
+  /* 版面 */
+  --top-height: 74px;
+  --points-panel-width: 400px;
+
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  display: grid;
+  grid-template-rows: var(--top-height) minmax(0, 1fr);
+  gap: 12px;
+  height: 100vh;
+  margin: 0;
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--soft);
+}
+
+button, input { font: inherit; color: inherit; }
+h2, h3 { margin: 0; }
+
+/* ===== 上方：頁面切換 ===== */
+
+.wizard-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+
+.page-switcher { display: flex; gap: 8px; align-items: center; }
+.page-toggle { display: flex; gap: 4px; }
+
+.page-button {
+  position: relative;
+  width: 38px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  font-size: .95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.page-button:hover { border-color: var(--blue); background: var(--blue-light); }
+.page-button.current { color: var(--white); border-color: var(--ink); background: var(--ink); }
+/* 已經有勾選紀錄的頁面：右上角一個小點 */
+.page-button.touched::after {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue-accent);
+  content: "";
+}
+
+.page-arrow {
+  width: 34px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  cursor: pointer;
+}
+.page-arrow:hover:not(:disabled) { background: var(--panel-bg); }
+.page-arrow:disabled { opacity: .3; cursor: not-allowed; }
+
+.page-meta { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.page-meta-index { color: var(--muted); font-size: .95rem; font-weight: 650; white-space: nowrap; }
+.page-meta-name { color: var(--blue); font-size: 1.25rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.conn { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; font-weight: 650; white-space: nowrap; }
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.conn[data-status="connected"] { color: var(--plus); }
+.conn[data-status="connected"] .conn-dot { background: var(--plus); }
+.conn[data-status="disconnected"] { color: var(--minus); }
+.conn[data-status="disconnected"] .conn-dot { background: var(--minus); }
+
+/* ===== 主體 ===== */
+
+.wizard-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
+  gap: 12px;
+  min-height: 0;
+}
+
+.panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+
+.panel-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-bg);
+}
+.panel-head h2 { font-size: 1.05rem; }
+.panel-count { margin-left: 6px; color: var(--muted); font-size: .9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.panel-actions { display: flex; gap: 8px; }
+
+.ghost-button {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: .85rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.ghost-button:hover:not(:disabled) { border-color: var(--blue); background: var(--blue-light); }
+.ghost-button:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ===== 步驟清單 ===== */
+
+.step-list { display: grid; grid-auto-rows: max-content; gap: 8px; min-height: 0; padding: 12px 16px; overflow-y: auto; scrollbar-width: thin; }
+
+.step-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--white);
+  transition: background .15s ease, border-color .15s ease;
+}
+.step-row.is-helped { border-color: var(--helped-border); background: var(--helped-bg); }
+.step-row.is-done { background: var(--done-bg); }
+.step-row.is-done.is-helped { background: var(--helped-bg); }
+.step-row.is-done .step-name { color: var(--muted); text-decoration: line-through; }
+
+.check { display: flex; gap: 6px; align-items: center; font-size: .88rem; font-weight: 650; white-space: nowrap; cursor: pointer; user-select: none; }
+.check input { width: 20px; height: 20px; margin: 0; accent-color: var(--blue); cursor: pointer; }
+.done-check { padding-top: 2px; }
+.help-check input { accent-color: var(--helped-border); }
+
+.step-body { display: grid; gap: 7px; min-width: 0; }
+.step-title { display: flex; gap: 9px; align-items: baseline; min-width: 0; }
+.step-index { color: var(--muted); font-size: .85rem; font-weight: 700; letter-spacing: .06em; }
+.step-name { min-width: 0; font-size: 1rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.step-list-price { margin-left: auto; padding: 3px 9px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+
+.help-row { display: flex; gap: 8px; align-items: center; }
+.cost-caption { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.cost-input {
+  width: 70px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  font-size: .9rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cost-input:focus { border-color: var(--blue); outline: none; }
+.cost-input:disabled { color: var(--helped-badge-text); background: var(--panel-bg); }
+
+/* ===== 點數面板 ===== */
+
+.points-panel { grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; }
+
+.points-readout { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+.points-box { display: grid; gap: 4px; padding: 14px 16px; background: var(--white); }
+.points-box.accent { background: var(--blue-light); }
+.points-label { color: var(--muted); font-size: .85rem; font-weight: 650; }
+.points-value { font-size: 2.1rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.points-value.negative { color: var(--minus); }
+
+.adjust { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.adjust-label { color: var(--muted); font-size: .85rem; font-weight: 650; white-space: nowrap; }
+.adjust-input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 1rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.adjust-input:focus { border-color: var(--blue); outline: none; }
+.adjust-button { padding: 8px 12px; border: 1px solid transparent; border-radius: 8px; font-size: .88rem; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.adjust-button.add { color: var(--white); background: var(--plus); }
+.adjust-button.sub { color: var(--white); background: var(--minus); }
+.adjust-button:hover { filter: brightness(1.1); }
+
+.ledger-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px 8px; }
+.ledger-head h3 { font-size: .98rem; }
+
+.ledger { display: grid; grid-auto-rows: max-content; gap: 4px; min-height: 0; margin: 0; padding: 0 16px 12px; overflow-y: auto; list-style: none; scrollbar-width: thin; }
+.ledger-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  font-size: .84rem;
+}
+.ledger-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ledger-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-delta { font-weight: 800; font-variant-numeric: tabular-nums; }
+.ledger-row.plus .ledger-delta { color: var(--plus); }
+.ledger-row.minus .ledger-delta { color: var(--minus); }
+.ledger-balance { color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+.ledger-empty { padding: 14px 0; color: var(--muted); font-size: .88rem; text-align: center; }
+
+.danger-button {
+  margin: 0 16px 14px;
+  padding: 9px;
+  color: var(--minus);
+  border: 1px solid var(--minus);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: .88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.danger-button:hover { color: var(--white); background: var(--minus); }
+
+/* ===== 未連線提示 ===== */
+
+.offline-banner {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  z-index: 10;
+  padding: 10px 20px;
+  color: var(--offline-ink);
+  border-radius: 99px;
+  background: var(--offline-bg);
+  box-shadow: 0 8px 24px var(--shadow);
+  font-size: .92rem;
+  font-weight: 650;
+  transform: translateX(-50%);
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); }
+
+@media (max-width: 1180px) {
+  :root { --points-panel-width: 340px; }
+  .page-button { width: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}

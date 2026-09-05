@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f4" />
+    <title>WoZ 控制台</title>
+    <link rel="stylesheet" href="/wizard/wizard.css" />
+  </head>
+  <body>
+    <header class="wizard-top">
+      <div class="page-switcher">
+        <button class="page-arrow" id="page-prev" type="button" aria-label="上一頁">←</button>
+        <div class="page-toggle" id="page-toggle" role="group" aria-label="切換頁面"></div>
+        <button class="page-arrow" id="page-next" type="button" aria-label="下一頁">→</button>
+      </div>
+      <div class="page-meta">
+        <span class="page-meta-index" id="page-meta-index">第 1 頁</span>
+        <span class="page-meta-name" id="page-meta-name"></span>
+      </div>
+      <div class="conn" id="conn" data-status="connecting">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="conn-label">連線中…</span>
+      </div>
+    </header>
+
+    <main class="wizard-body">
+      <section class="panel steps-panel">
+        <div class="panel-head">
+          <h2>本頁步驟 <span class="panel-count" id="step-count">0 / 0</span></h2>
+          <div class="panel-actions">
+            <button class="ghost-button" id="recenter" type="button" title="把參與者畫面的步驟列表捲回定位（上方最多兩個已完成步驟）">↕ 捲回目前步驟</button>
+            <button class="ghost-button" id="mark-all" type="button">本頁全部完成</button>
+            <button class="ghost-button" id="clear-all" type="button">本頁全部取消</button>
+          </div>
+        </div>
+        <div class="step-list" id="step-list"></div>
+      </section>
+
+      <aside class="panel points-panel">
+        <div class="panel-head">
+          <h2>點數</h2>
+        </div>
+
+        <div class="points-readout">
+          <div class="points-box">
+            <span class="points-label">總點數</span>
+            <strong class="points-value" id="total-points">—</strong>
+          </div>
+          <div class="points-box accent">
+            <span class="points-label">剩餘點數</span>
+            <strong class="points-value" id="remaining-points">—</strong>
+          </div>
+        </div>
+
+        <form class="adjust" id="adjust-form">
+          <label class="adjust-label" for="adjust-input">手動調整</label>
+          <input class="adjust-input" id="adjust-input" type="number" step="any" min="0" placeholder="點數" />
+          <button class="adjust-button add" id="adjust-add" type="button">＋ 加點</button>
+          <button class="adjust-button sub" id="adjust-sub" type="submit">－ 扣點</button>
+        </form>
+
+        <div class="ledger-head">
+          <h3>紀錄 <span class="panel-count" id="ledger-count">0 筆</span></h3>
+          <button class="ghost-button" id="undo-button" type="button" disabled>↩ 回溯上一筆</button>
+        </div>
+        <ol class="ledger" id="ledger"></ol>
+
+        <button class="danger-button" id="reset-button" type="button">重置全部</button>
+      </aside>
+    </main>
+
+    <div class="offline-banner" id="offline-banner" role="status" hidden>
+      未連線到 server —— 請確認已執行 <code>python3 server/serve.py</code>
+    </div>
+
+    <script src="/data/recipe-data.js"></script>
+    <script src="/shared/format.js"></script>
+    <script src="/shared/store.js"></script>
+    <script src="/wizard/wizard.js"></script>
+  </body>
+</html>

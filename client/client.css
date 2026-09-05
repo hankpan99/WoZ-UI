@@ -15,7 +15,7 @@
   --card-hover-border: #b7c2b8;
   --cost-text: #9d4e2d;
   --cost-bg: #fbede6;
-  /* 正在進行的步驟（滑鼠移入／選取中） */
+  /* 現在該做的那一步：本頁還沒完成、編號最小的步驟 */
   --active-bg: #d7e3d8;
   --active-border: #3d5745;
   --active-bar: #ce7144;
@@ -24,6 +24,14 @@
   /* 已完成的步驟：灰階強度 0～1、透明度 0～1 */
   --done-grayscale: 1;
   --done-opacity: .45;
+  /* 接受幫助的步驟 */
+  --helped-border: #d99b1c;
+  --helped-bg: #fdf6e6;
+  --helped-badge-text: #8a5c00;
+  --helped-badge-bg: #f6e2b0;
+  /* 未連線提示 */
+  --offline-ink: #ffffff;
+  --offline-bg: #b3372c;
   --detail-text: #555950;
   --action-number: #9b9e97;
   --placeholder-text: #858b82;
@@ -50,7 +58,7 @@
   --cost-size: 1.5rem;
   --action-gap: 16px;
   --detail-title-size: 1.35rem;
-  --detail-text-size: 1.08rem;
+  --detail-text-size: 1.2rem;
   --detail-columns: 2;
   --detail-row-gap: 12px;
   --detail-column-gap: 28px;
@@ -218,17 +226,28 @@ button { color: inherit; }
   border: 1px solid var(--line);
   border-radius: 13px;
   background: var(--white);
-  cursor: pointer;
+  /* 參與者不能選取步驟，只能移入預覽詳細步驟。 */
+  cursor: default;
   transition: border-color .2s ease, transform .2s ease, background .2s ease, box-shadow .2s ease;
 }
 
-.action-card:hover, .action-card:focus-visible {
+/* 滑鼠移入：向右輕推一點並換邊框，不會超出版面。沒有 active bar，
+   底色也只是極淡的一層 —— 真正的顏色高亮固定屬於「現在該做的那一步」
+   （下面的 .active 排在後面，所以移入它時仍維持高亮的樣子）。 */
+.action-card:hover {
   border-color: var(--card-hover-border);
-  outline: none;
   background: var(--card-hover-bg);
   transform: translateX(4px);
 }
 
+/* 接受幫助的步驟：底色與外框做記號，主要的辨識還是靠 .help-badge。
+   放在 active 之前，讓「現在該做的那一步」仍然最明顯。 */
+.action-card.helped {
+  border-color: var(--helped-border);
+  background: var(--helped-bg);
+}
+
+/* 現在該做的那一步：本頁還沒完成、編號最小的步驟，位置由程式決定。 */
 .action-card.active {
   border-color: var(--active-border);
   outline: none;
@@ -242,6 +261,9 @@ button { color: inherit; }
 .action-number { color: var(--action-number); font-size: var(--step-index-size); font-weight: 700; letter-spacing: .08em; }
 .action-name { min-width: 0; font-size: var(--step-name-size); font-weight: 650; line-height: 1.3; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere; }
 .cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+/* 「接受幫助」的記號。刻意做成 .action-card 的直接子元素，
+   這樣同時已完成時會被下面的灰階規則一起處理。 */
+.help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
 .action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
@@ -271,6 +293,23 @@ button { color: inherit; }
 .nav-button.secondary { justify-self: start; background: var(--white); }
 .nav-button.primary { justify-self: end; color: var(--white); border-color: var(--ink); background: var(--ink); }
 .nav-button:disabled { opacity: .3; cursor: not-allowed; }
+.offline-banner {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  z-index: 10;
+  padding: 10px 20px;
+  color: var(--offline-ink);
+  border-radius: 99px;
+  background: var(--offline-bg);
+  box-shadow: 0 8px 24px var(--plate-shadow);
+  font-size: .95rem;
+  font-weight: 650;
+  transform: translateX(-50%);
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); font-size: .95em; }
+
 @media (max-height: 760px) {
   .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr) 48px; gap: 10px; padding: 10px 0; }
   .stat-card { padding: 15px 22px; }
