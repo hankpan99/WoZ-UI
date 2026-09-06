@@ -29,6 +29,10 @@
   --helped-bg: #fdf6e6;
   --helped-badge-text: #8a5c00;
   --helped-badge-bg: #f6e2b0;
+  /* 接受幫助時浮出來的整頁說明卡 */
+  --overlay-scrim: rgba(28, 33, 26, .55);
+  /* 說明卡上「這條要參與者自己做」的淺灰色（wizard 沒有勾的動作） */
+  --help-card-off-text: #b4b7ae;
   /* 未連線提示 */
   --offline-ink: #ffffff;
   --offline-bg: #b3372c;
@@ -48,13 +52,13 @@
   --step-panel-width: 1.3fr;
   --stat-label-size: 2rem;
   --stat-value-size: clamp(2.3rem, 3.5vw, 3.2rem);
-  --stat-unit-size: .9rem;
+  --stat-unit-size: 1.25rem;
   --meal-label-size: 1.5rem;
   --stage-name-size: 1.5rem;
   --stage-hint-size: .95rem;
   --progress-count-size: 1.15rem;
   --step-name-size: 2rem;
-  --step-index-size: 1.2rem;
+  --step-index-size: 1.4rem;
   --cost-size: 1.5rem;
   --action-gap: 16px;
   /* 步驟圖片版位：佔左側面板的高度比例，其餘給「詳細步驟」。
@@ -64,12 +68,26 @@
   --step-image-fit: contain;
   --detail-title-size: 1.35rem;
   --detail-text-size: 1.2rem;
-  --detail-columns: 2;
   --detail-row-gap: 12px;
   --detail-column-gap: 28px;
   --meal-icon-width: clamp(100px, 10vw, 160px);
   --meal-icon-height: 90px;
   --meal-icon-height-compact: 76px;
+  /* 整頁說明卡（接受幫助時浮出來的那張）。
+     詳細步驟固定直向排列，放不下才自動多開一欄，最多幾欄看 client.js 的
+     MAX_HELP_COLUMNS。 */
+  /* 由上而下：助手介入 → 餐點-階段-步驟N → 步驟名稱 →
+     詳細步驟（編號／文字）→ 圖例 → 本次花費（標籤／數字／「點」）。
+     每一塊各自一個變數，改哪一塊就改哪一個。 */
+  --help-card-badge-size: 3rem;
+  --help-card-step-size: 1.5rem;
+  --help-card-title-size: 2rem;
+  --help-card-index-size: .78em;
+  --help-card-item-size: 1.7rem;
+  --help-card-legend-size: 1.3rem;
+  --help-card-cost-label-size: 1.7rem;
+  --help-card-cost-size: 3.6rem;
+  --help-card-cost-unit-size: .4em;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
 }
 
@@ -265,9 +283,11 @@ button { color: inherit; }
 
 .action-number { color: var(--action-number); font-size: var(--step-index-size); font-weight: 700; letter-spacing: .08em; }
 .action-name { min-width: 0; font-size: var(--step-name-size); font-weight: 650; line-height: 1.3; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere; }
+/* 卡片右側的標籤群：點數在上、「已介入」在下一行，整組靠最右邊。
+   刻意做成 .action-card 的直接子元素，這樣同時已完成時會被灰階規則一起處理。 */
+.action-tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; justify-content: center; }
 .cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
-/* 「接受幫助」的記號。刻意做成 .action-card 的直接子元素，
-   這樣同時已完成時會被下面的灰階規則一起處理。 */
+/* 「接受幫助」的記號，卡片最右邊那顆。 */
 .help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
 .action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
@@ -284,8 +304,12 @@ button { color: inherit; }
 
 .detail-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; padding: 20px 24px; overflow: hidden; }
 .detail-panel h2 { margin: 0 0 16px; color: var(--blue); font-size: var(--detail-title-size); line-height: 1.3; }
-.detail-panel ol { display: grid; grid-template-columns: repeat(var(--detail-columns), minmax(0, 1fr)); align-content: start; gap: var(--detail-row-gap) var(--detail-column-gap); min-height: 0; margin: 0; padding: 0 8px 0 0; overflow-y: auto; color: var(--detail-text); font-size: var(--detail-text-size); line-height: 1.55; list-style: none; counter-reset: detail-step; }
-.detail-panel li { position: relative; min-width: 0; padding: 0 4px 0 40px; overflow-wrap: anywhere; counter-increment: detail-step; }
+.detail-scroll { min-height: 0; padding-right: 8px; overflow-y: auto; }
+/* 直向一欄；column-count 由 client.js 的 fitDetailColumns() 在放不下時才加上去，
+   加上去之後多欄排版會自動把內容平均分配，而且仍是看完左欄再看右欄。 */
+.detail-panel ol { column-gap: var(--detail-column-gap); margin: 0; padding: 0; color: var(--detail-text); font-size: var(--detail-text-size); line-height: 1.55; list-style: none; counter-reset: detail-step; }
+.detail-panel li { position: relative; min-width: 0; margin-bottom: var(--detail-row-gap); padding: 0 4px 0 40px; overflow-wrap: anywhere; break-inside: avoid; counter-increment: detail-step; }
+.detail-panel li:last-child { margin-bottom: 0; }
 .detail-panel li::before { position: absolute; top: .05em; left: 0; content: counter(detail-step, decimal-leading-zero); color: var(--blue-accent); font-size: .82em; font-weight: 800; letter-spacing: .08em; }
 
 .slide-nav { display: grid; grid-template-columns: 1fr minmax(240px, 420px) 1fr; gap: 18px; align-items: center; min-height: 0; }
@@ -298,11 +322,116 @@ button { color: inherit; }
 .nav-button.secondary { justify-self: start; background: var(--white); }
 .nav-button.primary { justify-self: end; color: var(--white); border-color: var(--ink); background: var(--ink); }
 .nav-button:disabled { opacity: .3; cursor: not-allowed; }
+/* ===== 接受幫助的說明卡：蓋滿整個畫面，期間不能換頁 ===== */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vh, 48px);
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(3px);
+}
+.help-overlay[hidden] { display: none; }
+
+.help-card {
+  display: grid;
+  /* 標頭 / 詳細步驟 / 頁尾 */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1180px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border: 2px solid var(--helped-border);
+  border-radius: 26px;
+  background: var(--white);
+  box-shadow: 0 30px 80px rgba(20, 26, 18, .35);
+  animation: help-card-in .26s ease;
+}
+
+@keyframes help-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 整張卡只有兩個色塊：奶油色的標頭 ＋ 其餘全白。
+   標題行不另外給底色，靠琥珀色與字級當「眉標」，跟下面的黑色步驟名稱分開。 */
+.help-card-head {
+  display: grid;
+  gap: 10px;
+  padding: clamp(18px, 2.8vh, 30px) clamp(24px, 3vw, 44px);
+  border-bottom: 1px solid var(--line);
+  background: var(--helped-bg);
+}
+/* 「助手介入」靠左、階段資訊推到最右邊 */
+.help-card-title { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; justify-content: space-between; color: var(--helped-badge-text); }
+.help-card-badge { font-size: var(--help-card-badge-size); font-weight: 800; letter-spacing: .06em; }
+.help-card-step { font-size: var(--help-card-step-size); font-weight: 650; }
+.help-card-name { margin: 0; font-size: var(--help-card-title-size); font-weight: 750; line-height: 1.25; overflow-wrap: anywhere; }
+
+.help-card-body { min-height: 0; padding: clamp(18px, 3vh, 30px) clamp(24px, 3vw, 44px); overflow-y: auto; scrollbar-width: thin; }
+/* 直向一欄；column-count 由 client.js 的 fitHelpColumns() 在放不下時才加上去，
+   多欄時仍然是先填滿左邊那一欄再換下一欄，讀的順序不會亂掉。 */
+.help-card-list {
+  column-gap: 40px;
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--help-card-item-size);
+  line-height: 1.5;
+  list-style: none;
+  counter-reset: help-step;
+}
+.help-card-list li {
+  position: relative;
+  min-width: 0;
+  margin-bottom: 14px;
+  padding-left: 52px;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
+  counter-increment: help-step;
+}
+.help-card-list li:last-child { margin-bottom: 0; }
+.help-card-list li::before {
+  position: absolute;
+  top: .06em;
+  left: 0;
+  content: counter(help-step, decimal-leading-zero);
+  color: var(--helped-badge-text);
+  font-size: var(--help-card-index-size);
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+/* wizard 沒勾的動作：整條（含編號）淡成灰色，代表參與者要自己做。 */
+.help-card-list li.is-off,
+.help-card-list li.is-off::before { color: var(--help-card-off-text); }
+.help-card-empty { margin: 0; color: var(--muted); font-size: var(--help-card-item-size); }
+.help-card-empty[hidden] { display: none; }
+
+.help-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: baseline;
+  padding: clamp(14px, 2vh, 22px) clamp(24px, 3vw, 44px);
+  border-top: 1px solid var(--line);
+}
+/* 圖例自己就是範例：兩個詞用的正是清單上那兩種顏色。 */
+.help-card-legend { flex: 1 1 320px; margin: 0; color: var(--muted); font-size: var(--help-card-legend-size); font-weight: 600; line-height: 1.5; }
+.help-card-legend[hidden] { display: none; }
+.help-card-legend .legend-on { color: var(--ink); font-weight: 800; }
+.help-card-legend .legend-off { color: var(--help-card-off-text); font-weight: 800; }
+.help-card-cost-label { margin-left: auto; color: var(--muted); font-size: var(--help-card-cost-label-size); font-weight: 700; }
+.help-card-cost { color: var(--cost-text); font-size: var(--help-card-cost-size); line-height: 1; font-variant-numeric: tabular-nums; }
+.help-card-cost small { font-size: var(--help-card-cost-unit-size); font-weight: 650; }
+
 .offline-banner {
   position: fixed;
   bottom: 14px;
   left: 50%;
-  z-index: 10;
+  /* 要在說明卡之上，斷線提示不能被蓋掉。 */
+  z-index: 30;
   padding: 10px 20px;
   color: var(--offline-ink);
   border-radius: 99px;
@@ -324,8 +453,17 @@ button { color: inherit; }
   .detail-panel { padding: 16px 20px; }
   .stage-hint { margin-top: 2px; }
   .meal-icon-wrap { height: var(--meal-icon-height-compact); }
+  :root {
+    --help-card-badge-size: 1.2rem;
+    --help-card-step-size: 1.2rem;
+    --help-card-title-size: 1.9rem;
+    --help-card-item-size: 1.35rem;
+    --help-card-legend-size: 1rem;
+    --help-card-cost-label-size: 1.35rem;
+    --help-card-cost-size: 2.8rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }

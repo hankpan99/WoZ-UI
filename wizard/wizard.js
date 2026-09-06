@@ -1,7 +1,9 @@
 // Wizard 控制台。所有操作都只是送一個 action 給 server，
 // 規則與狀態都在 server/state.py，這一頁不自己算任何東西。
 const slides = window.RECIPE_SLIDES || [];
-const { actionKey, formatPoints, formatDelta, cleanLabel, formatTime } = window.WozFormat;
+const {
+  actionKey, formatPoints, formatDelta, cleanLabel, formatTime, pickedDetails, helpCost,
+} = window.WozFormat;
 const { dispatch } = window.WozStore;
 
 const elements = {
@@ -26,6 +28,9 @@ const elements = {
   ledgerCount: document.querySelector("#ledger-count"),
   undoButton: document.querySelector("#undo-button"),
   resetButton: document.querySelector("#reset-button"),
+  overlayStatus: document.querySelector("#overlay-status"),
+  overlayStatusText: document.querySelector("#overlay-status-text"),
+  overlayClose: document.querySelector("#overlay-close"),
   offlineBanner: document.querySelector("#offline-banner"),
 };
 
@@ -33,6 +38,13 @@ let currentIndex = 0;
 // 上一次真正重建過步驟清單的頁碼；同一頁的更新只做同步，
 // 才不會把 wizard 正在輸入的花費欄位洗掉。
 let renderedIndex = -1;
+// 下面三個都只是這一頁的顯示狀態，不會送到 server。
+// 展開中的詳細步驟清單。
+const expandedKeys = new Set();
+// wizard 手動打過花費的步驟：在他再動詳細步驟之前，不要蓋掉他打的數字。
+const manualCostKeys = new Set();
+// 上一次的「接受幫助」集合，用來認出剛勾起來的步驟並自動展開它的詳細步驟。
+let lastHelpedKeys = new Set();
 
 const pageLabel = (slide) => {
   const meal = cleanLabel(slide.meal);
@@ -136,6 +148,9 @@ function buildStepList() {
       costInput.step = "any";
       costInput.dataset.role = "cost";
       costInput.value = String(action.cost);
+      // 一旦 wizard 自己打了數字，就不要再被詳細步驟的自動計價蓋掉。
+      costInput.addEventListener("input", () => manualCostKeys.add(key));
+      manualCostKeys.delete(key);
 
       const helpLabel = document.createElement("label");
       helpLabel.className = "check help-check";
@@ -152,51 +167,176 @@ function buildStepList() {
           note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
         });
       });
-      helpLabel.append(helpBox, Object.assign(document.createElement("span"), { textContent: "接受幫助" }));
+      helpLabel.append(helpBox, Object.assign(document.createElement("span"), { textContent: "助手介入" }));
+
+      // 說明卡是參與者畫面上那張整頁的框；勾「接受幫助」時會自動叫出來，
+      // 這顆是事後再開關用的。
+      const overlayButton = document.createElement("button");
+      overlayButton.type = "button";
+      overlayButton.className = "overlay-button";
+      overlayButton.dataset.role = "overlay";
+      overlayButton.textContent = "顯示說明卡";
+      overlayButton.addEventListener("click", () => {
+        const showing = overlayButton.classList.contains("is-on");
+        dispatch({ type: "setHelpOverlay", key: showing ? null : key });
+      });
 
       helpRow.append(
         helpLabel,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
         costInput,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
+        overlayButton,
       );
 
       body.append(title, helpRow);
+      const detailBlock = buildDetailBlock(key, action.details || []);
+      if (detailBlock) body.append(detailBlock);
       row.append(doneLabel, body);
       return row;
     }),
   );
 }
 
+// 詳細步驟：預設全部勾選（＝原價），取消幾個就少扣幾點，
+// 參與者的說明卡上也只會列出還勾著的那幾條。
+function buildDetailBlock(key, details) {
+  if (!details.length) return null;
+
+  const caret = Object.assign(document.createElement("span"), { className: "detail-caret", textContent: "▸" });
+  const count = document.createElement("span");
+  count.className = "detail-count";
+  count.dataset.role = "detail-count";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "detail-toggle";
+  toggle.append(caret, Object.assign(document.createElement("span"), { textContent: "詳細步驟" }), count);
+  // 純展開／收合，不動任何實驗資料，所以直接用手上的狀態重畫就好。
+  toggle.addEventListener("click", () => {
+    if (expandedKeys.has(key)) expandedKeys.delete(key);
+    else expandedKeys.add(key);
+    if (window.WozStore.state) syncStepList(window.WozStore.state);
+  });
+
+  const head = document.createElement("div");
+  head.className = "detail-head";
+  head.append(toggle);
+  [["全選", true], ["全不選", false]].forEach(([text, value]) => {
+    const button = Object.assign(document.createElement("button"), {
+      type: "button", className: "mini-button", textContent: text,
+    });
+    button.addEventListener("click", () => setStepDetails(key, null, value));
+    head.append(button);
+  });
+
+  const checks = document.createElement("div");
+  checks.className = "detail-checks";
+  checks.dataset.role = "detail-checks";
+  checks.append(...details.map((text, detailIndex) => {
+    const label = document.createElement("label");
+    label.className = "detail-check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.dataset.detailIndex = String(detailIndex);
+    box.addEventListener("change", () => setStepDetails(key, detailIndex, box.checked));
+    label.append(
+      box,
+      // 編號跟參與者說明卡上的一致，兩邊對得起來。
+      Object.assign(document.createElement("span"), {
+        className: "detail-check-index",
+        textContent: String(detailIndex + 1).padStart(2, "0"),
+      }),
+      Object.assign(document.createElement("span"), { className: "detail-check-text", textContent: text }),
+    );
+    return label;
+  }));
+
+  const block = document.createElement("div");
+  block.className = "detail-block";
+  block.append(head, checks);
+  return block;
+}
+
+// index 為 null＝整個步驟全選 / 全不選。
+function setStepDetails(key, index, value) {
+  // 動了詳細步驟＝把計價交還給自動規則。
+  manualCostKeys.delete(key);
+  dispatch({ type: "setHelpDetail", key, index, value });
+}
+
 function syncStepList(state) {
   const done = new Set(state.done);
   const helped = state.helped || {};
+  const overlayKey = state.helpOverlay || null;
 
-  [...elements.stepList.children].forEach((row) => {
+  [...elements.stepList.children].forEach((row, index) => {
     const key = row.dataset.key;
+    const action = slides[currentIndex]?.actions[index];
+    const details = action?.details || [];
+    const picked = new Set(pickedDetails(state, key, details.length));
     const isDone = done.has(key);
     const isHelped = Object.prototype.hasOwnProperty.call(helped, key);
+    const isShowing = overlayKey === key;
 
     row.querySelector('[data-role="done"]').checked = isDone;
     const helpBox = row.querySelector('[data-role="helped"]');
     helpBox.checked = isHelped;
 
+    // 剛勾成「接受幫助」的步驟自動展開，讓 wizard 可以馬上調要代勞哪幾條。
+    if (isHelped && !lastHelpedKeys.has(key)) expandedKeys.add(key);
+
+    row.querySelectorAll("[data-detail-index]").forEach((box) => {
+      box.checked = picked.has(Number(box.dataset.detailIndex));
+    });
+    const checks = row.querySelector('[data-role="detail-checks"]');
+    if (checks) {
+      const open = expandedKeys.has(key);
+      checks.hidden = !open;
+      row.querySelector(".detail-caret").textContent = open ? "▾" : "▸";
+      row.querySelector('[data-role="detail-count"]').textContent =
+        `${picked.size} / ${details.length}`;
+    }
+
     const costInput = row.querySelector('[data-role="cost"]');
-    // 已勾選的一定顯示帳本裡的金額；未勾選就保留 wizard 打好的值。
     // 正在輸入的欄位不動，避免打到一半被覆蓋。
-    if (isHelped && document.activeElement !== costInput) {
-      costInput.value = String(helped[key]);
+    if (document.activeElement !== costInput) {
+      // 已勾選的一定顯示帳本裡的金額；還沒勾的跟著詳細步驟自動算，
+      // 但 wizard 手動打過的就以他打的為準。
+      if (isHelped) costInput.value = String(helped[key]);
+      else if (!manualCostKeys.has(key)) costInput.value = String(helpCost(action, picked.size));
     }
     costInput.disabled = isHelped;
 
+    const overlayButton = row.querySelector('[data-role="overlay"]');
+    overlayButton.disabled = !isHelped;
+    overlayButton.classList.toggle("is-on", isShowing);
+    overlayButton.textContent = isShowing ? "隱藏說明卡" : "顯示說明卡";
+
     row.classList.toggle("is-done", isDone);
     row.classList.toggle("is-helped", isHelped);
+    row.classList.toggle("is-showing", isShowing);
   });
+
+  lastHelpedKeys = new Set(Object.keys(helped));
 
   const total = slides[currentIndex]?.actions.length || 0;
   const doneCount = [...elements.stepList.children]
     .filter((row) => done.has(row.dataset.key)).length;
   elements.stepCount.textContent = `${doneCount} / ${total}`;
+}
+
+// 說明卡可能屬於別的頁面，所以在步驟清單之外再給一條全域的提示與關閉鈕。
+function syncOverlayStatus(state) {
+  const key = state.helpOverlay || null;
+  elements.overlayStatus.hidden = !key;
+  if (!key) return;
+
+  const [slideIndex, actionIndex] = key.split(":").map(Number);
+  const slide = slides[slideIndex];
+  const name = slide?.actions[actionIndex]?.name || "";
+  elements.overlayStatusText.textContent =
+    `參與者畫面顯示中：第${slide?.step ?? "?"}頁 · 步驟${stepLabel(actionIndex)}　${name}`;
 }
 
 // ---- 點數與帳本 ----------------------------------------------------------
@@ -249,6 +389,7 @@ function applyState(state) {
 
   syncPageToggle(state);
   syncStepList(state);
+  syncOverlayStatus(state);
   syncPoints(state);
   syncLedger(state);
 }
@@ -297,6 +438,8 @@ elements.adjustForm.addEventListener("submit", (event) => {
   event.preventDefault();
   adjustPoints(-1);
 });
+
+elements.overlayClose.addEventListener("click", () => dispatch({ type: "setHelpOverlay", key: null }));
 
 elements.undoButton.addEventListener("click", () => dispatch({ type: "undoLedger" }));
 elements.resetButton.addEventListener("click", () => {

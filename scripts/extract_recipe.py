@@ -22,6 +22,8 @@ OUTPUT = DATA_DIR / "recipe-data.js"
 SHEET_NAME = "食譜excel v2"
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+# 「餐點」「階段」欄裡代表「沒有內容」的寫法（與前端 cleanLabel 一致）。
+PLACEHOLDER_LABELS = {"", "-", "—"}
 
 
 def worksheet_path(archive):
@@ -134,6 +136,25 @@ def extract():
     return slides
 
 
+def is_placeholder(value):
+    return (value or "").strip() in PLACEHOLDER_LABELS
+
+
+def drop_unlabelled(slides):
+    """「餐點」與「階段」都沒有內容的頁面不進食譜，頁碼重新排成連號。
+
+    回傳 (留下來的頁面, 被拿掉的頁面)。
+    """
+    kept, dropped = [], []
+    for slide in slides:
+        target = dropped if is_placeholder(slide["meal"]) and is_placeholder(slide["stage"]) else kept
+        target.append(slide)
+
+    for index, slide in enumerate(kept):
+        slide["step"] = str(index + 1)
+    return kept, dropped
+
+
 def format_cost(value):
     return f"${value:g}"
 
@@ -193,7 +214,10 @@ def print_cost_summary(slides):
 
 if __name__ == "__main__":
     DATA_DIR.mkdir(exist_ok=True)
-    slides = extract()
+    slides, dropped = drop_unlabelled(extract())
+    for slide in dropped:
+        names = "、".join(action["name"] for action in slide["actions"]) or "（沒有步驟）"
+        print(f"略過原第 {slide['step']} 頁：餐點與階段都是「-」—— {names}")
     data = json.dumps(slides, ensure_ascii=False, indent=2)
     OUTPUT.write_text(
         f"// Generated from User Study v3.xlsx ({SHEET_NAME}). Run scripts/extract_recipe.py to refresh.\n"

@@ -51,7 +51,9 @@
             </figure>
             <div class="detail-panel">
               <h2>詳細步驟</h2>
-              <ol id="detail-list"></ol>
+              <div class="detail-scroll" id="detail-scroll">
+                <ol id="detail-list"></ol>
+              </div>
             </div>
           </aside>
 
@@ -77,6 +79,30 @@
         </button>
       </nav>
     </main>
+
+    <div class="help-overlay" id="help-overlay" role="dialog" aria-modal="true"
+         aria-labelledby="help-overlay-name" hidden>
+      <div class="help-card">
+        <header class="help-card-head">
+          <div class="help-card-title">
+            <span class="help-card-badge">🤖 助手介入</span>
+            <span class="help-card-step" id="help-overlay-step"></span>
+          </div>
+          <h2 class="help-card-name" id="help-overlay-name"></h2>
+        </header>
+        <div class="help-card-body" id="help-overlay-body">
+          <ol class="help-card-list" id="help-overlay-list"></ol>
+          <p class="help-card-empty" id="help-overlay-empty" hidden>這個步驟沒有更細的動作。</p>
+        </div>
+        <footer class="help-card-foot">
+          <p class="help-card-legend" id="help-overlay-legend" hidden>
+            <span class="legend-on">黑色字體</span>動作將由助手介入、<span class="legend-off">淺灰色字體</span>則由您獨立完成
+          </p>
+          <span class="help-card-cost-label">本次花費</span>
+          <strong class="help-card-cost"><span id="help-overlay-cost">0</span><small> 點</small></strong>
+        </footer>
+      </div>
+    </div>
 
     <div class="offline-banner" id="offline-banner" role="status" hidden>
       未連線到 server —— 請確認已執行 <code>python3 server/serve.py</code>

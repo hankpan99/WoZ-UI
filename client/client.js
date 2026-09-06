@@ -13,7 +13,13 @@ const MEAL_ICONS = [
 const slides = window.RECIPE_SLIDES || [];
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
-const { actionKey, formatPoints, cleanLabel, slideCost } = window.WozFormat;
+// 詳細步驟先直向排成一欄，放不下才多開一欄，最多這麼多欄。
+// 說明卡（整頁那張）與左下角的「詳細步驟」各有各的上限。
+const MAX_HELP_COLUMNS = 3;
+const MAX_DETAIL_COLUMNS = 2;
+const {
+  actionKey, formatPoints, cleanLabel, slideCost, pickedDetails,
+} = window.WozFormat;
 
 const elements = {
   remainingCost: document.querySelector("#remaining-cost"),
@@ -30,6 +36,7 @@ const elements = {
   actionColumn: document.querySelector("#action-column"),
   actionList: document.querySelector("#action-list"),
   scrollCue: document.querySelector("#scroll-cue"),
+  detailScroll: document.querySelector("#detail-scroll"),
   detailList: document.querySelector("#detail-list"),
   stepImage: document.querySelector("#step-image"),
   imagePlaceholder: document.querySelector("#image-placeholder"),
@@ -37,6 +44,14 @@ const elements = {
   nextButton: document.querySelector("#next-button"),
   fullscreenButton: document.querySelector("#fullscreen-button"),
   fullscreenLabel: document.querySelector("#fullscreen-label"),
+  helpOverlay: document.querySelector("#help-overlay"),
+  helpOverlayBody: document.querySelector("#help-overlay-body"),
+  helpOverlayStep: document.querySelector("#help-overlay-step"),
+  helpOverlayName: document.querySelector("#help-overlay-name"),
+  helpOverlayList: document.querySelector("#help-overlay-list"),
+  helpOverlayEmpty: document.querySelector("#help-overlay-empty"),
+  helpOverlayLegend: document.querySelector("#help-overlay-legend"),
+  helpOverlayCost: document.querySelector("#help-overlay-cost"),
   offlineBanner: document.querySelector("#offline-banner"),
 };
 
@@ -51,6 +66,8 @@ let lastScrollNonce = null;
 let previewIndex = 0;
 let doneKeys = new Set();
 let helpedKeys = new Set();
+// 正在顯示說明卡的步驟（"slideIdx:actionIdx"），沒有就是 null。
+let overlayKey = null;
 
 function updateRemainingPoints() {
   const remaining = window.WozStore.state?.remaining;
@@ -116,6 +133,19 @@ function showImage(actionIndex) {
   }
 }
 
+// 詳細步驟先直向排成一欄；放不下（會需要捲動）才多開一欄，最多 max 欄。
+// 多開之後 CSS 的多欄排版會把內容平均分配，而且仍是看完左欄再看右欄。
+function fitColumns(scroller, list, max) {
+  for (let columns = 1; columns <= max; columns += 1) {
+    list.style.columnCount = String(columns);
+    // 讀 scrollHeight 會強制重新排版，所以量到的是這個欄數的實際結果。
+    if (scroller.scrollHeight <= scroller.clientHeight) break;
+  }
+}
+
+const fitDetailColumns = () =>
+  fitColumns(elements.detailScroll, elements.detailList, MAX_DETAIL_COLUMNS);
+
 // 顯示某個步驟的詳細步驟與圖片。
 function showStep(actionIndex) {
   previewIndex = actionIndex;
@@ -127,6 +157,7 @@ function showStep(actionIndex) {
       return item;
     }),
   );
+  fitDetailColumns();
   showImage(actionIndex);
 }
 
@@ -170,16 +201,18 @@ function autoScroll(force) {
   requestAnimationFrame(scrollToCurrentStep);
 }
 
-// 只有「接受幫助」的步驟才有這顆標記；同時已完成時，
-// 既有的 .action-card.done > * 規則會自動把它一起灰階。
+// 只有「接受幫助」的步驟才有這顆標記，放在卡片最右邊（點數標籤的後面）。
+// 掛在 .action-tags 裡，而 .action-tags 是卡片的直接子元素，
+// 所以同時已完成時，既有的 .action-card.done > * 規則會把它一起灰階。
 function syncHelpBadge(button, helped) {
-  const existing = button.querySelector(".help-badge");
+  const tags = button.querySelector(".action-tags");
+  const existing = tags.querySelector(".help-badge");
   if (helped === Boolean(existing)) return;
   if (helped) {
     const badge = document.createElement("span");
     badge.className = "help-badge";
-    badge.textContent = "🤖 已協助";
-    button.append(badge);
+    badge.textContent = "🤖 介入";
+    tags.append(badge);
   } else {
     existing.remove();
   }
@@ -200,19 +233,23 @@ function renderActions(slide) {
 
     const number = document.createElement("span");
     number.className = "action-number";
-    number.textContent = String(index + 1).padStart(2, "0");
+    number.textContent = `${index + 1}.`;
 
     const name = document.createElement("span");
     name.className = "action-name";
     name.textContent = action.name;
 
-    button.append(number, name);
+    // 右側的標籤都放這裡，順序是「點數 → 已介入」，靠卡片最右邊排。
+    const tags = document.createElement("span");
+    tags.className = "action-tags";
     if (action.cost > 0) {
       const cost = document.createElement("span");
       cost.className = "cost-pill";
       cost.textContent = `${formatPoints(action.cost)} 點`;
-      button.append(cost);
+      tags.append(cost);
     }
+
+    button.append(number, name, tags);
     syncHelpBadge(button, helpedKeys.has(key));
     return button;
   });
@@ -280,6 +317,52 @@ function render() {
   renderedIndex = currentIndex;
 }
 
+const fitHelpColumns = () =>
+  fitColumns(elements.helpOverlayBody, elements.helpOverlayList, MAX_HELP_COLUMNS);
+
+// 整頁的說明卡：wizard 勾「接受幫助」時浮出來，寫清楚這次被代勞了哪些詳細步驟。
+// 出現期間參與者不能換頁（見 moveSlide），要先看完。
+function syncHelpOverlay(state) {
+  const key = state.helpOverlay || null;
+  // 說明卡指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
+  const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
+  const slide = slides[slideIndex];
+  const action = slide?.actions[actionIndex];
+
+  overlayKey = action ? key : null;
+  elements.helpOverlay.hidden = !overlayKey;
+  if (!overlayKey) return;
+
+  const details = action.details || [];
+  const picked = new Set(pickedDetails(state, key, details.length));
+
+  // 「餐點 - 階段 - 步驟N」；Excel 沒填餐點的頁面就只有「階段 - 步驟N」。
+  elements.helpOverlayStep.textContent = [
+    cleanLabel(slide.meal),
+    cleanLabel(slide.stage),
+    `步驟${actionIndex + 1}`,
+  ].filter(Boolean).join(" - ");
+  elements.helpOverlayName.textContent = action.name;
+  // 永遠列出全部的動作，編號才跟控制台一致；wizard 沒勾的那幾條淡成灰色，
+  // 代表那些要參與者自己做（對照最下方的圖例）。
+  elements.helpOverlayList.replaceChildren(
+    ...details.map((text, index) => {
+      const item = document.createElement("li");
+      item.textContent = text;
+      item.classList.toggle("is-off", !picked.has(index));
+      return item;
+    }),
+  );
+  elements.helpOverlayEmpty.hidden = details.length > 0;
+  // 圖例只在真的有灰字時才出現；整步驟都由助手做的話沒什麼好對照的。
+  elements.helpOverlayLegend.hidden = picked.size === details.length;
+
+  const cost = state.helped?.[key];
+  elements.helpOverlayCost.textContent = cost == null ? "—" : formatPoints(cost);
+
+  fitHelpColumns();
+}
+
 function applyState(state) {
   doneKeys = new Set(state.done);
   helpedKeys = new Set(Object.keys(state.helped || {}));
@@ -298,9 +381,13 @@ function applyState(state) {
   }
 
   if (recenterRequested) autoScroll(true);
+
+  syncHelpOverlay(state);
 }
 
 function moveSlide(direction) {
+  // 說明卡蓋著的時候不能換頁（按鈕與方向鍵都走這裡），先看完再說。
+  if (overlayKey) return;
   const nextIndex = Math.max(0, Math.min(slides.length - 1, currentIndex + direction));
   if (nextIndex === currentIndex) return;
   // 換頁一樣寫回 server，wizard 的頁面切換器才會跟著動。
@@ -315,7 +402,12 @@ elements.stepImage.addEventListener("error", () => {
   elements.imagePlaceholder.hidden = false;
 });
 elements.actionList.addEventListener("scroll", updateScrollCue, { passive: true });
-window.addEventListener("resize", updateScrollCue);
+window.addEventListener("resize", () => {
+  updateScrollCue();
+  // 進出全螢幕會改變可用高度，欄數要重算。
+  fitDetailColumns();
+  if (overlayKey) fitHelpColumns();
+});
 elements.scrollCue.addEventListener("click", () => {
   elements.actionList.scrollBy({ top: elements.actionList.clientHeight * 0.8, behavior: "smooth" });
 });

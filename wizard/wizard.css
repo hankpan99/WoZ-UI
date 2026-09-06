@@ -161,6 +161,25 @@ h2, h3 { margin: 0; }
 
 /* ===== 步驟清單 ===== */
 
+/* panel-head ＋ 說明卡提示列 ＋ 清單；提示列 hidden 時那一列自然收成 0。 */
+.steps-panel { grid-template-rows: auto auto minmax(0, 1fr); }
+
+.overlay-status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--helped-border);
+  background: var(--helped-bg);
+  color: var(--helped-badge-text);
+  font-size: .88rem;
+  font-weight: 650;
+}
+.overlay-status[hidden] { display: none; }
+.overlay-status-dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--helped-border); }
+.overlay-status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overlay-status .ghost-button { margin-left: auto; flex-shrink: 0; }
+
 .step-list { display: grid; grid-auto-rows: max-content; gap: 8px; min-height: 0; padding: 12px 16px; overflow-y: auto; scrollbar-width: thin; }
 
 .step-row {
@@ -206,6 +225,82 @@ h2, h3 { margin: 0; }
 }
 .cost-input:focus { border-color: var(--blue); outline: none; }
 .cost-input:disabled { color: var(--helped-badge-text); background: var(--panel-bg); }
+
+.overlay-button {
+  margin-left: auto;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--white);
+  font-size: .8rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.overlay-button:hover:not(:disabled) { border-color: var(--helped-border); background: var(--helped-bg); }
+.overlay-button:disabled { opacity: .3; cursor: not-allowed; }
+.overlay-button.is-on { color: var(--white); border-color: var(--helped-border); background: var(--helped-border); }
+.step-row.is-showing { box-shadow: 0 0 0 2px var(--helped-border); }
+
+/* ===== 詳細步驟 ===== */
+
+.detail-block { display: grid; gap: 6px; padding-top: 3px; }
+.detail-head { display: flex; gap: 6px; align-items: center; }
+
+.detail-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 4px 3px 0;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+  font-size: .82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.detail-toggle:hover { color: var(--ink); }
+.detail-caret { width: .8em; color: var(--blue); font-size: .75rem; }
+.detail-count { color: var(--blue); font-variant-numeric: tabular-nums; }
+
+.mini-button {
+  padding: 3px 8px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  font-size: .76rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.mini-button:hover { color: var(--ink); border-color: var(--blue); background: var(--blue-light); }
+
+/* 直向一條一條列，順序與編號跟參與者說明卡一致。 */
+.detail-checks {
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-bg);
+}
+.detail-checks[hidden] { display: none; }
+.detail-check {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: .84rem;
+  line-height: 1.4;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.detail-check input { width: 15px; height: 15px; margin: 0; flex-shrink: 0; accent-color: var(--helped-border); cursor: pointer; }
+.detail-check-index { flex-shrink: 0; color: var(--helped-badge-text); font-size: .78rem; font-weight: 800; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+.detail-check-text { min-width: 0; }
+/* 沒有勾＝這次不代勞，參與者的說明卡上不會出現這一條。 */
+.detail-check:has(input:not(:checked)) .detail-check-index,
+.detail-check:has(input:not(:checked)) .detail-check-text { color: var(--muted); text-decoration: line-through; }
 
 /* ===== 點數面板 ===== */
 
