@@ -14,6 +14,10 @@ const slides = window.RECIPE_SLIDES || [];
 // 上方花費卡要不要顯示「此步驟剩餘動作所需花費點數」那一行。
 // false ＝ 整行（標題與數字）都不出現，只留「實驗剩餘動作所需花費點數」。
 const SHOW_STEP_COST = false;
+// 上方點數卡要不要顯示「剩餘主動幫助點數」那一行。
+// false ＝ 整行（標題與數字）都不出現，參與者只看得到「剩餘可指揮助手點數」。
+// 只影響參與者畫面；控制台永遠看得到這個數字。
+const SHOW_PROACTIVE_POINTS = false;
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
 // 詳細步驟先直向排成一欄，放不下才多開一欄，最多這麼多欄。
@@ -21,7 +25,7 @@ const MAX_DONE_ABOVE = 2;
 const MAX_HELP_COLUMNS = 3;
 const MAX_DETAIL_COLUMNS = 2;
 const {
-  actionKey, formatPoints, cleanLabel, pickedDetails,
+  actionKey, formatPoints, cleanLabel, pickedDetails, proactiveDetails, proactiveCost,
 } = window.WozFormat;
 
 const elements = {
@@ -30,6 +34,9 @@ const elements = {
   stepCostValue: document.querySelector("#step-cost-value"),
   remainingCost: document.querySelector("#remaining-cost"),
   remainingPoints: document.querySelector("#remaining-points"),
+  remainingProactive: document.querySelector("#remaining-proactive"),
+  remainingProactiveLabel: document.querySelector("#remaining-proactive-label"),
+  remainingProactiveValue: document.querySelector("#remaining-proactive-value"),
   currentStep: document.querySelector("#current-step"),
   stepTotal: document.querySelector("#step-total"),
   progressBar: document.querySelector("#progress-bar"),
@@ -50,11 +57,15 @@ const elements = {
   fullscreenLabel: document.querySelector("#fullscreen-label"),
   helpOverlay: document.querySelector("#help-overlay"),
   helpOverlayBody: document.querySelector("#help-overlay-body"),
+  helpOverlayBadge: document.querySelector("#help-overlay-badge"),
   helpOverlayStep: document.querySelector("#help-overlay-step"),
+  helpOverlayAnswer: document.querySelector("#help-overlay-answer"),
   helpOverlayName: document.querySelector("#help-overlay-name"),
   helpOverlayList: document.querySelector("#help-overlay-list"),
   helpOverlayEmpty: document.querySelector("#help-overlay-empty"),
   helpOverlayLegend: document.querySelector("#help-overlay-legend"),
+  helpOverlayLegendText: document.querySelector("#help-overlay-legend-text"),
+  helpOverlayCostLabel: document.querySelector("#help-overlay-cost-label"),
   helpOverlayCost: document.querySelector("#help-overlay-cost"),
   offlineBanner: document.querySelector("#offline-banner"),
 };
@@ -70,12 +81,20 @@ let lastScrollNonce = null;
 let previewIndex = 0;
 let doneKeys = new Set();
 let helpedKeys = new Set();
+// 主動提議「已接受」的步驟；不接受的不算被代勞，所以不進這一組。
+let proactiveAcceptedKeys = new Set();
 // 正在顯示說明卡的步驟（"slideIdx:actionIdx"），沒有就是 null。
 let overlayKey = null;
 
+// 兩個點數池各自獨立：可指揮助手＝參與者自己要求的幫助，
+// 主動幫助＝助手主動提議的額度（不接受時會退進可指揮那一池）。
 function updateRemainingPoints() {
-  const remaining = window.WozStore.state?.remaining;
-  elements.remainingPoints.textContent = remaining == null ? "—" : formatPoints(remaining);
+  const state = window.WozStore.state;
+  const show = (element, value) => {
+    element.textContent = value == null ? "—" : formatPoints(value);
+  };
+  show(elements.remainingPoints, state?.remaining);
+  if (SHOW_PROACTIVE_POINTS) show(elements.remainingProactive, state?.proactiveRemaining);
 }
 
 // 一頁裡「還沒完成」的動作要花多少點。
@@ -212,21 +231,27 @@ function autoScroll(force) {
   requestAnimationFrame(scrollToCurrentStep);
 }
 
-// 只有「接受幫助」的步驟才有這顆標記，放在卡片最右邊（點數標籤的後面）。
+// 被助手代勞過的步驟才有這些標記，放在卡片最右邊（點數標籤的後面）。
 // 掛在 .action-tags 裡，而 .action-tags 是卡片的直接子元素，
 // 所以同時已完成時，既有的 .action-card.done > * 規則會把它一起灰階。
-function syncHelpBadge(button, helped) {
+// 兩種幫助各自獨立，所以同一個步驟可能同時掛兩顆。
+function syncBadge(button, className, text, on) {
   const tags = button.querySelector(".action-tags");
-  const existing = tags.querySelector(".help-badge");
-  if (helped === Boolean(existing)) return;
-  if (helped) {
+  const existing = tags.querySelector(`.${className}`);
+  if (on === Boolean(existing)) return;
+  if (on) {
     const badge = document.createElement("span");
-    badge.className = "help-badge";
-    badge.textContent = "🤖 介入";
+    badge.className = className;
+    badge.textContent = text;
     tags.append(badge);
   } else {
     existing.remove();
   }
+}
+
+function syncHelpBadges(button, key) {
+  syncBadge(button, "help-badge", "🤖 介入", helpedKeys.has(key));
+  syncBadge(button, "proactive-badge", "🤖 主動", proactiveAcceptedKeys.has(key));
 }
 
 function renderActions(slide) {
@@ -240,7 +265,7 @@ function renderActions(slide) {
     button.className = "action-card";
     button.addEventListener("mouseenter", () => showStep(index));
     button.classList.toggle("done", doneKeys.has(key));
-    button.classList.toggle("helped", helpedKeys.has(key));
+    button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
 
     const number = document.createElement("span");
     number.className = "action-number";
@@ -261,7 +286,7 @@ function renderActions(slide) {
     }
 
     button.append(number, name, tags);
-    syncHelpBadge(button, helpedKeys.has(key));
+    syncHelpBadges(button, key);
     return button;
   });
 
@@ -276,8 +301,8 @@ function syncActionStates() {
   [...elements.actionList.children].forEach((button, index) => {
     const key = actionKey(currentIndex, index);
     button.classList.toggle("done", doneKeys.has(key));
-    button.classList.toggle("helped", helpedKeys.has(key));
-    syncHelpBadge(button, helpedKeys.has(key));
+    button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
+    syncHelpBadges(button, key);
   });
   updateRemainingPoints();
   updateCosts();
@@ -343,11 +368,16 @@ function render() {
 const fitHelpColumns = () =>
   fitColumns(elements.helpOverlayBody, elements.helpOverlayList, MAX_HELP_COLUMNS);
 
-// 整頁的說明卡：wizard 勾「接受幫助」時浮出來，寫清楚這次被代勞了哪些詳細步驟。
-// 出現期間參與者不能換頁（見 moveSlide），要先看完。
+// 整頁的卡片有兩種，共用同一塊 DOM（畫面上同時只會有一張，server 保證互斥）：
+//   assist    ＝ wizard 勾「接受幫助」時浮出來的說明卡，代勞範圍由控制台的勾選決定。
+//   proactive ＝ 助手主動提議卡，代勞範圍寫死在 Excel 的「介入」欄，參與者可以不接受。
+// 兩種出現期間參與者都不能換頁（見 moveSlide），要先看完。
 function syncHelpOverlay(state) {
-  const key = state.helpOverlay || null;
-  // 說明卡指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
+  // 主動提議卡優先：server 只會設其中一個，這裡的順序只是防呆。
+  const proactiveKey = state.proactiveOverlay || null;
+  const key = proactiveKey || state.helpOverlay || null;
+  const mode = proactiveKey ? "proactive" : "assist";
+  // 卡片指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
   const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
   const slide = slides[slideIndex];
   const action = slide?.actions[actionIndex];
@@ -356,8 +386,14 @@ function syncHelpOverlay(state) {
   elements.helpOverlay.hidden = !overlayKey;
   if (!overlayKey) return;
 
+  const isProactive = mode === "proactive";
+  elements.helpOverlay.dataset.mode = mode;
+
   const details = action.details || [];
-  const picked = new Set(pickedDetails(state, key, details.length));
+  // 主動提議的範圍來自 Excel，不看 helpDetails；兩種幫助各自獨立。
+  const picked = new Set(
+    isProactive ? proactiveDetails(action) : pickedDetails(state, key, details.length),
+  );
 
   // 「餐點 - 階段 - 步驟N」；Excel 沒填餐點的頁面就只有「階段 - 步驟N」。
   elements.helpOverlayStep.textContent = [
@@ -366,7 +402,17 @@ function syncHelpOverlay(state) {
     `步驟${actionIndex + 1}`,
   ].filter(Boolean).join(" - ");
   elements.helpOverlayName.textContent = action.name;
-  // 永遠列出全部的動作，編號才跟控制台一致；wizard 沒勾的那幾條淡成灰色，
+  elements.helpOverlayBadge.textContent = isProactive ? "🤖 助手主動提議" : "🤖 助手介入";
+
+  // 提議被回答之後就把結果標在卡片上，wizard 收卡前參與者都看得到。
+  const answer = isProactive ? state.proactive?.[key]?.status : null;
+  elements.helpOverlayAnswer.hidden = !answer;
+  if (answer) {
+    elements.helpOverlayAnswer.textContent = answer === "accepted" ? "已接受" : "未接受";
+    elements.helpOverlayAnswer.dataset.answer = answer;
+  }
+
+  // 永遠列出全部的動作，編號才跟控制台一致；不在代勞範圍內的那幾條淡成灰色，
   // 代表那些要參與者自己做（對照最下方的圖例）。
   elements.helpOverlayList.replaceChildren(
     ...details.map((text, index) => {
@@ -379,8 +425,15 @@ function syncHelpOverlay(state) {
   elements.helpOverlayEmpty.hidden = details.length > 0;
   // 圖例只在真的有灰字時才出現；整步驟都由助手做的話沒什麼好對照的。
   elements.helpOverlayLegend.hidden = picked.size === details.length;
+  elements.helpOverlayLegendText.textContent = isProactive
+    ? "動作助手可以幫您完成"
+    : "動作將由助手介入";
 
-  const cost = state.helped?.[key];
+  // 還沒回答的提議寫「接受將花費」，其他情況都是已經確定的金額。
+  elements.helpOverlayCostLabel.textContent = isProactive && !answer ? "接受將花費" : "本次花費";
+  const cost = isProactive
+    ? (state.proactive?.[key]?.cost ?? proactiveCost(action))
+    : state.helped?.[key];
   elements.helpOverlayCost.textContent = cost == null ? "—" : formatPoints(cost);
 
   fitHelpColumns();
@@ -389,6 +442,11 @@ function syncHelpOverlay(state) {
 function applyState(state) {
   doneKeys = new Set(state.done);
   helpedKeys = new Set(Object.keys(state.helped || {}));
+  proactiveAcceptedKeys = new Set(
+    Object.entries(state.proactive || {})
+      .filter(([, entry]) => entry?.status === "accepted")
+      .map(([key]) => key),
+  );
 
   // wizard 按「捲回目前步驟」時 server 會把這個號碼 +1。
   const nonce = state.scrollNonce ?? 0;
@@ -469,9 +527,11 @@ window.WozStore.onStatus((status) => {
 });
 window.WozStore.subscribe(applyState);
 
-// 這一行的開關只在載入時決定一次，不會中途變。
+// 這幾行的開關只在載入時決定一次，不會中途變。
 elements.stepCostLabel.hidden = !SHOW_STEP_COST;
 elements.stepCostValue.hidden = !SHOW_STEP_COST;
+elements.remainingProactiveLabel.hidden = !SHOW_PROACTIVE_POINTS;
+elements.remainingProactiveValue.hidden = !SHOW_PROACTIVE_POINTS;
 
 // 還沒收到第一份狀態前先畫一次，避免畫面空白。
 render();

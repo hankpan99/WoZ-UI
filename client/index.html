@@ -32,8 +32,10 @@
           <strong class="stat-value"><span id="remaining-cost">0</span><small> $</small></strong>
         </article>
         <article class="stat-card accent">
-          <span class="stat-label">剩餘點數</span>
+          <span class="stat-label">剩餘可指揮助手點數</span>
           <strong class="stat-value"><span id="remaining-points">0</span><small> $</small></strong>
+          <span class="stat-label" id="remaining-proactive-label">剩餘主動幫助點數</span>
+          <strong class="stat-value" id="remaining-proactive-value"><span id="remaining-proactive">0</span><small> $</small></strong>
         </article>
       </section>
 
@@ -83,8 +85,9 @@
       <div class="help-card">
         <header class="help-card-head">
           <div class="help-card-title">
-            <span class="help-card-badge">🤖 助手介入</span>
+            <span class="help-card-badge" id="help-overlay-badge">🤖 助手介入</span>
             <span class="help-card-step" id="help-overlay-step"></span>
+            <span class="help-card-answer" id="help-overlay-answer" hidden></span>
           </div>
           <h2 class="help-card-name" id="help-overlay-name"></h2>
         </header>
@@ -94,9 +97,9 @@
         </div>
         <footer class="help-card-foot">
           <p class="help-card-legend" id="help-overlay-legend" hidden>
-            <span class="legend-on">黑色字體</span>動作將由助手介入、<span class="legend-off">淺灰色字體</span>則由您獨立完成
+            <span class="legend-on">黑色字體</span><span id="help-overlay-legend-text">動作將由助手介入</span>、<span class="legend-off">淺灰色字體</span>則由您獨立完成
           </p>
-          <span class="help-card-cost-label">本次花費</span>
+          <span class="help-card-cost-label" id="help-overlay-cost-label">本次花費</span>
           <strong class="help-card-cost"><span id="help-overlay-cost">0</span><small> $</small></strong>
         </footer>
       </div>

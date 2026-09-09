@@ -12,10 +12,18 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RECIPE_DATA = PROJECT_ROOT / "data" / "recipe-data.js"
 
-# 參與者的總點數（原本 app.js 的 STARTING_POINTS）。
-TOTAL_POINTS = 200
+# 參與者的總預算（原本 app.js 的 STARTING_POINTS）。
+# 兩個池加起來就是這個數字：主動幫助池的總額由 Excel 的「介入」欄決定，
+# 剩下的才是可指揮助手池（見下面的 TOTAL_POINTS）。
+TOTAL_BUDGET = 278
 # 讀不到 data/recipe-data.js 時的頁數 fallback。
 FALLBACK_SLIDE_COUNT = 20
+
+# 兩個各自獨立的點數池。帳本每一筆都標明自己算在哪一池。
+# assist    ＝參與者主動要求的幫助，總額 TOTAL_POINTS。
+# proactive ＝助手主動提議的幫助，總額由 Excel「介入」欄的 O 算出來。
+ASSIST_POOL = "assist"
+PROACTIVE_POOL = "proactive"
 
 
 def load_slides():
@@ -64,6 +72,48 @@ def action_details(key):
     return list(action.get("details") or []) if action else []
 
 
+def action_proactive(key):
+    """助手主動提議時要代勞的詳細步驟索引（Excel「介入」欄標 O 的那幾條）。
+
+    這個範圍由 Excel 決定、實驗中不可調整，所以與 helpDetails 無關。
+    """
+    action = _action_at(key)
+    if not action:
+        return []
+    total = len(action.get("details") or [])
+    picked = action.get("proactive") or []
+    return sorted(
+        index for index in picked if isinstance(index, int) and 0 <= index < total
+    )
+
+
+def proactive_cost(key):
+    """主動提議要扣的主動幫助點數。規則與 help_cost() 相同。
+
+    整個步驟都標 O ＝ Excel 原價；只標幾條 ＝ 標到的條數
+    （min() 同樣是防呆，避免少標反而變貴）。
+    """
+    marks = len(action_proactive(key))
+    if marks == 0:
+        return 0
+    total = len(action_details(key))
+    price = action_cost(key)
+    if total and marks == total:
+        return _to_number(price)
+    return _to_number(min(marks, price))
+
+
+def proactive_total():
+    """全部主動提議的花費加總＝「剩餘主動幫助點數」的起始值。"""
+    if not SLIDES:
+        return 0
+    return sum(
+        proactive_cost(f"{slide_index}:{action_index}")
+        for slide_index, slide in enumerate(SLIDES)
+        for action_index in range(len(slide.get("actions") or []))
+    )
+
+
 def default_state():
     return {
         "version": 0,
@@ -74,9 +124,15 @@ def default_state():
         "helpDetails": {},
         # client 上正在顯示的整頁說明卡，或 None。
         "helpOverlay": None,
-        "ledger": [],  # 點數的唯一來源
+        # 助手主動提議的結果。key -> {"status": "accepted"|"declined", "cost": n}
+        "proactive": {},
+        # client 上正在顯示的主動提議卡，或 None。與 helpOverlay 互斥（同時只有一張卡）。
+        "proactiveOverlay": None,
+        "ledger": [],  # 兩個點數池的唯一來源，每筆用 pool 分辨是哪一池
         "totalPoints": TOTAL_POINTS,
         "remaining": TOTAL_POINTS,
+        "proactiveTotal": PROACTIVE_TOTAL,
+        "proactiveRemaining": PROACTIVE_TOTAL,
         "slideCount": SLIDE_COUNT,
         # wizard 按「捲回目前步驟」時 +1；client 看到號碼變了就重新對齊列表。
         "scrollNonce": 0,
@@ -123,6 +179,30 @@ def help_note(state, key):
     return note if picked == total else f"{note}（{picked}/{total} 動作）"
 
 
+def _step_label(key):
+    """帳本用的「第N頁 · 步驟NN」，取不到回 None。"""
+    if not SLIDES:
+        return None
+    try:
+        slide_index, action_index = (int(part) for part in key.split(":"))
+        step = SLIDES[slide_index]["step"]
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None
+    return f"第{step}頁 · 步驟{action_index + 1:02d}"
+
+
+def proactive_note(key, status):
+    """主動提議的帳本文字。只代勞被標記的那幾條時帶上比例。"""
+    label = _step_label(key)
+    if label is None:
+        return None
+    answer = "接受" if status == "accepted" else "不接受"
+    note = f"{label} 主動提議：{answer}"
+    total = len(action_details(key))
+    marks = len(action_proactive(key))
+    return note if marks == total else f"{note}（{marks}/{total} 動作）"
+
+
 def _clamp_index(index):
     try:
         index = int(index)
@@ -140,11 +220,21 @@ def _to_number(value, fallback=0):
     return int(number) if number.is_integer() else round(number, 2)
 
 
-def _entry(kind, delta, note, key=None):
+# 主動幫助點數的總額由 Excel 的「介入」欄決定，不是常數。
+# 放在 _to_number 之後才算，proactive_cost() 會用到它。
+PROACTIVE_TOTAL = proactive_total()
+# 可指揮助手池＝總預算扣掉主動幫助池。兩池相加永遠等於 TOTAL_BUDGET，
+# 所以改 Excel 的「介入」欄時，這個數字會自己跟著調整。
+TOTAL_POINTS = _to_number(TOTAL_BUDGET - PROACTIVE_TOTAL)
+
+
+def _entry(kind, delta, note, key=None, pool=ASSIST_POOL):
     entry = {
         "id": uuid.uuid4().hex,
         "ts": int(time.time() * 1000),
         "kind": kind,
+        # 這筆算在哪一個點數池：可指揮助手（assist）或主動幫助（proactive）。
+        "pool": pool,
         "delta": delta,
         "note": note,
     }
@@ -172,15 +262,36 @@ def _resync_help(state, key):
 
 
 def _close_overlay_for(state, keys):
-    """這些步驟裡只要有一個是正在顯示的說明卡，就把它收掉。"""
+    """這些步驟裡只要有一個是正在顯示的卡片，就把它收掉（兩種卡都算）。"""
     if state["helpOverlay"] in keys:
         state["helpOverlay"] = None
+    if state["proactiveOverlay"] in keys:
+        state["proactiveOverlay"] = None
+
+
+def _drop_proactive_entries(state, key):
+    """把某個步驟的主動提議帳目全部拿掉（「接受」1 筆、「不接受」2 筆）。"""
+    state["ledger"] = [
+        item for item in state["ledger"]
+        if not (item["kind"] == "proactive" and item.get("key") == key)
+    ]
+
+
+def _pool_of(item):
+    """舊資料沒有 pool 欄位時一律算成可指揮池，維持原本的行為。"""
+    return item.get("pool", ASSIST_POOL)
 
 
 def recalculate(state):
-    """remaining 永遠等於 totalPoints + Σ ledger.delta，不存在第二個點數來源。"""
-    total = state["totalPoints"] + sum(item["delta"] for item in state["ledger"])
-    state["remaining"] = _to_number(total)
+    """兩個池各自等於 總額 + Σ 自己那一池的 ledger.delta，不存在第二個點數來源。"""
+    assist = state["totalPoints"] + sum(
+        item["delta"] for item in state["ledger"] if _pool_of(item) == ASSIST_POOL
+    )
+    proactive = state["proactiveTotal"] + sum(
+        item["delta"] for item in state["ledger"] if _pool_of(item) == PROACTIVE_POOL
+    )
+    state["remaining"] = _to_number(assist)
+    state["proactiveRemaining"] = _to_number(proactive)
     return state
 
 
@@ -236,8 +347,10 @@ def apply_action(state, action):
             state["helped"][key] = cost
             note = help_note(state, key) or action.get("note") or f"步驟 {key} 接受幫助"
             state["ledger"].append(_entry("help", -cost, note, key))
-            # 勾起來的當下就把說明卡推到參與者畫面上。
+            # 勾起來的當下就把說明卡推到參與者畫面上；
+            # 畫面上只放得下一張卡，所以主動提議卡要讓位。
             state["helpOverlay"] = key
+            state["proactiveOverlay"] = None
         else:
             if key not in state["helped"]:
                 return state, False
@@ -285,6 +398,52 @@ def apply_action(state, action):
         if key == state["helpOverlay"]:
             return state, False
         state["helpOverlay"] = key
+        # 兩張卡互斥：叫出說明卡就把主動提議卡收掉。
+        if key:
+            state["proactiveOverlay"] = None
+
+    elif kind == "setProactiveOverlay":
+        # 只有 Excel 標過「介入」的步驟才有提議卡可以叫；None＝關掉。
+        key = action.get("key")
+        key = key if isinstance(key, str) and action_proactive(key) else None
+        if key == state["proactiveOverlay"]:
+            return state, False
+        state["proactiveOverlay"] = key
+        if key:
+            state["helpOverlay"] = None
+
+    elif kind == "setProactive":
+        # 參與者對主動提議的回應。status：accepted / declined / None（取消）。
+        key = action.get("key")
+        if not isinstance(key, str) or not action_proactive(key):
+            return state, False
+        status = action.get("status")
+        if status not in ("accepted", "declined", None):
+            return state, False
+
+        current = state["proactive"].get(key)
+        if (current or {}).get("status") == status:
+            return state, False
+
+        # 沿用 setHelped 的原則：帳本＝目前生效的帳目清單，不記反向帳。
+        # 改判與取消都是先把舊的那幾筆拿掉，再記新的，結果永遠可預期。
+        _drop_proactive_entries(state, key)
+
+        if status is None:
+            state["proactive"].pop(key, None)
+            _close_overlay_for(state, {key})
+        else:
+            cost = _to_number(action.get("cost"), proactive_cost(key))
+            state["proactive"][key] = {"status": status, "cost": cost}
+            note = proactive_note(key, status) or f"步驟 {key} 主動提議：{status}"
+            # 接受＝主動池付掉這筆。
+            state["ledger"].append(_entry("proactive", -cost, note, key, PROACTIVE_POOL))
+            if status == "declined":
+                # 不接受＝主動池一樣付掉，但等額退進可指揮池，
+                # 讓參與者把這筆額度轉成自己能支配的資源。
+                state["ledger"].append(
+                    _entry("proactive", cost, f"{note} → 退回可指揮點數", key, ASSIST_POOL)
+                )
 
     elif kind == "adjustPoints":
         delta = _to_number(action.get("delta"))
@@ -300,6 +459,13 @@ def apply_action(state, action):
         if removed["kind"] == "help":
             state["helped"].pop(removed.get("key"), None)
             _close_overlay_for(state, {removed.get("key")})
+        elif removed["kind"] == "proactive":
+            # 「不接受」記了兩筆（主動池扣、可指揮池退），
+            # 只回溯一筆會讓兩個池對不起來，所以整組一起拿掉。
+            key = removed.get("key")
+            _drop_proactive_entries(state, key)
+            state["proactive"].pop(key, None)
+            _close_overlay_for(state, {key})
 
     elif kind == "recenter":
         # 純顯示指令：不改任何實驗資料，只請 client 把步驟列表捲回定位。

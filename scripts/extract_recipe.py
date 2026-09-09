@@ -24,6 +24,9 @@ NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 # 「餐點」「階段」欄裡代表「沒有內容」的寫法（與前端 cleanLabel 一致）。
 PLACEHOLDER_LABELS = {"", "-", "—"}
+# 標記「這條詳細動作屬於助手主動提議的範圍」的欄位與值。
+PROACTIVE_HEADER = "介入"
+PROACTIVE_MARK = "O"
 
 
 def worksheet_path(archive):
@@ -90,6 +93,9 @@ def extract():
         missing = [name for name in required if name not in columns]
         if missing:
             raise ValueError(f"缺少必要欄位：{', '.join(missing)}")
+        # 「介入」欄不是必要欄位：沒有這一欄就當成整份食譜都沒有主動幫助，
+        # 舊的 workbook 仍然開得起來。
+        proactive_column = columns.get(PROACTIVE_HEADER)
 
         for row in rows:
             meal = row.get(columns["餐點"], "")
@@ -122,6 +128,8 @@ def extract():
                     "name": action_name.replace("\n", " "),
                     "cost": float(cost_match.group()) if cost_match else 0,
                     "details": [],
+                    # 「介入」欄標 O 的那幾條詳細動作的索引，沒有就是空陣列。
+                    "proactive": [],
                 }
                 if current_action["cost"] != 0 and current_action["cost"].is_integer():
                     current_action["cost"] = int(current_action["cost"])
@@ -129,6 +137,14 @@ def extract():
 
             detail = row.get(columns["步驟內容"], "")
             if current_action is not None and detail:
+                # 記的是 details 的索引，所以一定要在真的 append 之前算、
+                # 而且只在這個 if 裡面做：萬一哪天出現「有 O 但沒有步驟內容」
+                # 的列，那一列不會產生 detail，索引也就不會整排位移。
+                marked = proactive_column and (
+                    (row.get(proactive_column) or "").strip().upper() == PROACTIVE_MARK
+                )
+                if marked:
+                    current_action["proactive"].append(len(current_action["details"]))
                 current_action["details"].append(
                     " ".join(detail.split())
                 )
@@ -212,6 +228,47 @@ def print_cost_summary(slides):
         print(fallback_pretty_table(headers, rows))
 
 
+def print_proactive_summary(slides):
+    """主動幫助的總額。這個數字就是 client 上「剩餘主動幫助點數」的起始值。
+
+    計價規則與 server/state.py 的 proactive_cost() 一致：
+    整個步驟都標 O ＝ 原價，只標幾條 ＝ 標到的條數。
+    """
+    rows = []
+    total = 0
+    for slide in slides:
+        for index, action in enumerate(slide["actions"]):
+            marks = len(action["proactive"])
+            if not marks:
+                continue
+            details = len(action["details"])
+            cost = action["cost"] if details and marks == details else min(marks, action["cost"])
+            total += cost
+            rows.append([
+                f"第{slide['step']}頁 · 步驟{index + 1:02d}",
+                f"{marks}/{details}",
+                format_cost(cost),
+                action["name"],
+            ])
+
+    print(f"\n{SHEET_NAME}：主動幫助（「{PROACTIVE_HEADER}」欄標 {PROACTIVE_MARK}）")
+    if not rows:
+        print("（沒有任何標記）")
+        return
+
+    headers = ["步驟", "標記/全部", "花費", "步驟名稱"]
+    if PrettyTable is not None:
+        table = PrettyTable()
+        table.field_names = headers
+        table.align = "l"
+        table.align["花費"] = "r"
+        table.add_rows(rows)
+        print(table)
+    else:
+        print(fallback_pretty_table(headers, rows))
+    print(f"合計：{len(rows)} 個步驟 / {format_cost(total)}")
+
+
 if __name__ == "__main__":
     DATA_DIR.mkdir(exist_ok=True)
     slides, dropped = drop_unlabelled(extract())
@@ -226,3 +283,4 @@ if __name__ == "__main__":
     )
     print(f"Wrote {OUTPUT.name}")
     print_cost_summary(slides)
+    print_proactive_summary(slides)

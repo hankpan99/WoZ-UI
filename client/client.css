@@ -33,6 +33,15 @@
   --overlay-scrim: rgba(28, 33, 26, .55);
   /* 說明卡上「這條要參與者自己做」的淺灰色（wizard 沒有勾的動作） */
   --help-card-off-text: #b4b7ae;
+  /* 助手主動提議卡：跟「接受幫助」的說明卡用不同色系，讓兩張卡一眼分得出來。 */
+  --proactive-border: #3f7cae;
+  --proactive-bg: #eaf2f9;
+  --proactive-text: #1f4f76;
+  --proactive-badge-bg: #d6e6f3;
+  --proactive-accepted-text: #2f6b3d;
+  --proactive-accepted-bg: #dff0e2;
+  --proactive-declined-text: #7a6a4a;
+  --proactive-declined-bg: #f0ebe0;
   /* 未連線提示 */
   --offline-ink: #ffffff;
   --offline-bg: #b3372c;
@@ -48,7 +57,8 @@
   --top-panel-height-compact: 118px;
   --fullscreen-width: 76px;
   --cost-panel-width: 1fr;
-  --points-panel-width: 1fr;
+  /* 標題從「剩餘點數」變成「剩餘可指揮助手點數」之後長很多，所以比花費卡再寬一點。 */
+  --points-panel-width: 1.15fr;
   --step-panel-width: 1.15fr;
   --stat-label-size: 2.3rem;
   --stat-value-size: 3rem;
@@ -60,6 +70,11 @@
   --cost-row-gap: 10px;
   --cost-label-size: 2.3rem;
   --cost-value-size: 3rem;
+  /* 點數卡也有兩行（可指揮助手／主動幫助）。標題比花費卡的長，
+     所以字級預設小一點；覺得太小就把這兩個調大。 */
+  --points-row-gap: 10px;
+  --points-label-size: 2.3rem;
+  --points-value-size: 3rem;
   --progress-count-size: 1.15rem;
   --step-name-size: 2rem;
   --step-index-size: 1.4rem;
@@ -149,7 +164,10 @@ button { color: inherit; }
 .cost-card .stat-label { max-width: none; font-size: var(--cost-label-size); }
 .cost-card .stat-value { font-size: var(--cost-value-size); }
 
-.stat-card.accent { background: var(--blue-light); }
+/* 點數卡同樣有兩行（可指揮助手／主動幫助），排法跟花費卡一致。 */
+.stat-card.accent { align-content: center; gap: var(--points-row-gap) 20px; background: var(--blue-light); }
+.stat-card.accent .stat-label { max-width: none; font-size: var(--points-label-size); }
+.stat-card.accent .stat-value { font-size: var(--points-value-size); }
 .stat-copy { min-width: 0; }
 .stat-label { display: block; max-width: 12em; color: var(--muted); font-size: var(--stat-label-size); font-weight: 650; line-height: 1.25; letter-spacing: .02em; overflow-wrap: anywhere; }
 /* 餐點與階段各佔一行，卡片才不用做那麼寬，也把寬度讓給右邊的圖示。
@@ -308,6 +326,8 @@ button { color: inherit; }
 .cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 「接受幫助」的記號，卡片最右邊那顆。 */
 .help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+/* 主動提議被接受的步驟。兩種幫助各自獨立，所以可能跟 .help-badge 並排。 */
+.proactive-badge { padding: 7px 11px; border-radius: 99px; color: var(--proactive-text); background: var(--proactive-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
 .action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
@@ -383,11 +403,21 @@ button { color: inherit; }
   border-bottom: 1px solid var(--line);
   background: var(--helped-bg);
 }
-/* 「助手介入」靠左、階段資訊推到最右邊 */
-.help-card-title { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; justify-content: space-between; color: var(--helped-badge-text); }
+/* 「助手介入」（與主動提議卡的回應結果）靠左、階段資訊推到最右邊 */
+.help-card-title { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; color: var(--helped-badge-text); }
 .help-card-badge { font-size: var(--help-card-badge-size); font-weight: 800; letter-spacing: .06em; }
-.help-card-step { font-size: var(--help-card-step-size); font-weight: 650; }
+.help-card-step { margin-left: auto; font-size: var(--help-card-step-size); font-weight: 650; }
 .help-card-name { margin: 0; font-size: var(--help-card-title-size); font-weight: 750; line-height: 1.25; overflow-wrap: anywhere; }
+/* 參與者已經回答過的主動提議，把結果標在眉標上。 */
+.help-card-answer { padding: 4px 14px; border-radius: 99px; font-size: var(--help-card-step-size); font-weight: 800; white-space: nowrap; }
+.help-card-answer[hidden] { display: none; }
+.help-card-answer[data-answer="accepted"] { color: var(--proactive-accepted-text); background: var(--proactive-accepted-bg); }
+.help-card-answer[data-answer="declined"] { color: var(--proactive-declined-text); background: var(--proactive-declined-bg); }
+
+/* 主動提議卡：同一塊 DOM，只換色系（藍）與外框，跟琥珀色的說明卡分開。 */
+.help-overlay[data-mode="proactive"] .help-card { border-color: var(--proactive-border); }
+.help-overlay[data-mode="proactive"] .help-card-head { background: var(--proactive-bg); }
+.help-overlay[data-mode="proactive"] .help-card-title { color: var(--proactive-text); }
 
 .help-card-body { min-height: 0; padding: clamp(18px, 3vh, 30px) clamp(24px, 3vw, 44px); overflow-y: auto; scrollbar-width: thin; }
 /* 直向一欄；column-count 由 client.js 的 fitHelpColumns() 在放不下時才加上去，
@@ -467,6 +497,8 @@ button { color: inherit; }
   .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr) 48px; gap: 10px; padding: 10px 0; }
   .stat-card { padding: 15px 22px; }
   .stat-value { font-size: 1.8rem; }
+  .stat-card.accent .stat-label { font-size: 1.15rem; }
+  .stat-card.accent .stat-value { font-size: 1.8rem; }
   .recipe-stage { padding: 15px 22px 18px; }
   .action-card { min-height: 56px; }
   .detail-panel { padding: 16px 20px; }

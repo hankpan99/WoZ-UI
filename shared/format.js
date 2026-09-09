@@ -43,8 +43,25 @@
     return Math.min(pickedCount, price);
   };
 
+  // ---- 助手主動提議 ------------------------------------------------------
+  // 同樣是 server/state.py（action_proactive / proactive_cost）的鏡像。
+  // 範圍寫死在 Excel 的「介入」欄，實驗中不可調整，所以不看 state。
+
+  // 這個步驟裡屬於主動提議範圍的詳細動作索引。
+  const proactiveDetails = (action) => action?.proactive || [];
+
+  // 整個步驟都標記＝原價；只標幾條＝標到的條數。沒有標記就是 0。
+  const proactiveCost = (action) => {
+    const marks = proactiveDetails(action).length;
+    if (marks === 0) return 0;
+    const total = (action?.details || []).length;
+    const price = action?.cost || 0;
+    if (total && marks === total) return price;
+    return Math.min(marks, price);
+  };
+
   window.WozFormat = {
     actionKey, formatPoints, formatDelta, cleanLabel, formatTime, slideCost,
-    pickedDetails, helpCost,
+    pickedDetails, helpCost, proactiveDetails, proactiveCost,
   };
 })();

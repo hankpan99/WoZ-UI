@@ -3,6 +3,7 @@
 const slides = window.RECIPE_SLIDES || [];
 const {
   actionKey, formatPoints, formatDelta, cleanLabel, formatTime, pickedDetails, helpCost,
+  proactiveDetails, proactiveCost,
 } = window.WozFormat;
 const { dispatch } = window.WozStore;
 
@@ -21,6 +22,7 @@ const elements = {
   clearAll: document.querySelector("#clear-all"),
   totalPoints: document.querySelector("#total-points"),
   remainingPoints: document.querySelector("#remaining-points"),
+  remainingProactive: document.querySelector("#remaining-proactive"),
   adjustForm: document.querySelector("#adjust-form"),
   adjustInput: document.querySelector("#adjust-input"),
   adjustAdd: document.querySelector("#adjust-add"),
@@ -190,7 +192,9 @@ function buildStepList() {
       );
 
       body.append(title, helpRow);
-      const detailBlock = buildDetailBlock(key, action.details || []);
+      const proactiveRow = buildProactiveRow(key, action, slide, index);
+      if (proactiveRow) body.append(proactiveRow);
+      const detailBlock = buildDetailBlock(key, action.details || [], proactiveDetails(action));
       if (detailBlock) body.append(detailBlock);
       row.append(doneLabel, body);
       return row;
@@ -198,9 +202,84 @@ function buildStepList() {
   );
 }
 
+// 助手主動提議。只有 Excel「介入」欄標過 O 的步驟才有這一列，其餘步驟完全不變。
+// 代勞範圍固定是那幾條標記，不像「助手介入」可以逐條調整。
+function buildProactiveRow(key, action, slide, index) {
+  const marks = proactiveDetails(action);
+  if (!marks.length) return null;
+
+  const row = document.createElement("div");
+  row.className = "proactive-row";
+
+  const cost = proactiveCost(action);
+  const costInput = document.createElement("input");
+  costInput.className = "cost-input";
+  costInput.type = "number";
+  costInput.step = "any";
+  costInput.dataset.role = "proactive-cost";
+  costInput.value = String(cost);
+
+  // 顯示提議卡 / 收起來。比照「助手介入」那一列的說明卡按鈕。
+  const overlayButton = document.createElement("button");
+  overlayButton.type = "button";
+  overlayButton.className = "overlay-button";
+  overlayButton.dataset.role = "proactive-overlay";
+  overlayButton.textContent = "顯示提議卡";
+  overlayButton.addEventListener("click", () => {
+    const showing = overlayButton.classList.contains("is-on");
+    dispatch({ type: "setProactiveOverlay", key: showing ? null : key });
+  });
+
+  // 參與者口頭回答，wizard 在這裡代按。
+  // 接受＝主動池扣點；不接受＝主動池一樣扣，但等額退進可指揮池。
+  const answerButton = (role, text, status) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `answer-button ${role}`;
+    button.dataset.role = role;
+    button.textContent = text;
+    button.addEventListener("click", () => {
+      const typed = Number(costInput.value);
+      dispatch({
+        type: "setProactive",
+        key,
+        status,
+        cost: Number.isFinite(typed) ? typed : cost,
+      });
+    });
+    return button;
+  };
+
+  const clearButton = document.createElement("button");
+  clearButton.type = "button";
+  clearButton.className = "ghost-button";
+  clearButton.dataset.role = "proactive-clear";
+  clearButton.textContent = "取消";
+  clearButton.addEventListener("click", () => {
+    dispatch({ type: "setProactive", key, status: null });
+  });
+
+  row.append(
+    Object.assign(document.createElement("span"), {
+      className: "proactive-tag",
+      textContent: `🤖 主動提議 ${marks.length}/${(action.details || []).length}`,
+      title: `第${slide.step}頁 · 步驟${stepLabel(index)} 在 Excel「介入」欄標了 ${marks.length} 條`,
+    }),
+    overlayButton,
+    Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
+    costInput,
+    Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
+    answerButton("accept", "接受", "accepted"),
+    answerButton("decline", "不接受", "declined"),
+    clearButton,
+  );
+  return row;
+}
+
 // 詳細步驟：預設全部勾選（＝原價），取消幾個就少扣幾點，
 // 參與者的說明卡上也只會列出還勾著的那幾條。
-function buildDetailBlock(key, details) {
+// marks 是主動提議範圍，只用來加一個記號，不影響這裡的勾選。
+function buildDetailBlock(key, details, marks = []) {
   if (!details.length) return null;
 
   const caret = Object.assign(document.createElement("span"), { className: "detail-caret", textContent: "▸" });
@@ -230,12 +309,18 @@ function buildDetailBlock(key, details) {
     head.append(button);
   });
 
+  const markSet = new Set(marks);
   const checks = document.createElement("div");
   checks.className = "detail-checks";
   checks.dataset.role = "detail-checks";
   checks.append(...details.map((text, detailIndex) => {
     const label = document.createElement("label");
     label.className = "detail-check";
+    // 主動提議會代勞的那幾條加個記號，實驗中一眼看得出範圍。
+    if (markSet.has(detailIndex)) {
+      label.classList.add("is-proactive");
+      label.title = "在助手主動提議的範圍內";
+    }
     const box = document.createElement("input");
     box.type = "checkbox";
     box.dataset.detailIndex = String(detailIndex);
@@ -268,7 +353,9 @@ function setStepDetails(key, index, value) {
 function syncStepList(state) {
   const done = new Set(state.done);
   const helped = state.helped || {};
+  const proactive = state.proactive || {};
   const overlayKey = state.helpOverlay || null;
+  const proactiveOverlayKey = state.proactiveOverlay || null;
 
   [...elements.stepList.children].forEach((row, index) => {
     const key = row.dataset.key;
@@ -316,6 +403,8 @@ function syncStepList(state) {
     row.classList.toggle("is-done", isDone);
     row.classList.toggle("is-helped", isHelped);
     row.classList.toggle("is-showing", isShowing);
+
+    syncProactiveRow(row, key, action, proactive[key], proactiveOverlayKey === key);
   });
 
   lastHelpedKeys = new Set(Object.keys(helped));
@@ -326,17 +415,49 @@ function syncStepList(state) {
   elements.stepCount.textContent = `${doneCount} / ${total}`;
 }
 
+// 沒有主動提議的步驟不會有這一列，直接跳過。
+function syncProactiveRow(row, key, action, entry, isShowing) {
+  const overlayButton = row.querySelector('[data-role="proactive-overlay"]');
+  if (!overlayButton) return;
+
+  const status = entry?.status || null;
+  const costInput = row.querySelector('[data-role="proactive-cost"]');
+  // 已經有回答就顯示實際記在帳上的金額，並鎖住輸入框（比照「助手介入」）。
+  if (document.activeElement !== costInput) {
+    costInput.value = String(status ? entry.cost : proactiveCost(action));
+  }
+  costInput.disabled = Boolean(status);
+
+  overlayButton.classList.toggle("is-on", isShowing);
+  overlayButton.textContent = isShowing ? "隱藏提議卡" : "顯示提議卡";
+
+  row.querySelector('[data-role="accept"]').classList.toggle("is-on", status === "accepted");
+  row.querySelector('[data-role="decline"]').classList.toggle("is-on", status === "declined");
+  row.querySelector('[data-role="proactive-clear"]').disabled = !status;
+
+  row.classList.toggle("has-proactive", true);
+  row.classList.toggle("is-proactive-accepted", status === "accepted");
+  row.classList.toggle("is-proactive-declined", status === "declined");
+  row.classList.toggle("is-proactive-showing", isShowing);
+}
+
 // 說明卡可能屬於別的頁面，所以在步驟清單之外再給一條全域的提示與關閉鈕。
 function syncOverlayStatus(state) {
-  const key = state.helpOverlay || null;
+  // 兩種卡共用這條提示；server 保證同時只有一張。
+  const proactiveKey = state.proactiveOverlay || null;
+  const key = proactiveKey || state.helpOverlay || null;
   elements.overlayStatus.hidden = !key;
+  // 關閉鈕要送對應的 action，記在 dataset 上讓 click handler 讀。
+  elements.overlayStatus.dataset.mode = proactiveKey ? "proactive" : "assist";
+  elements.overlayClose.textContent = proactiveKey ? "關閉提議卡" : "關閉說明卡";
   if (!key) return;
 
   const [slideIndex, actionIndex] = key.split(":").map(Number);
   const slide = slides[slideIndex];
   const name = slide?.actions[actionIndex]?.name || "";
+  const kind = proactiveKey ? "主動提議卡" : "說明卡";
   elements.overlayStatusText.textContent =
-    `參與者畫面顯示中：第${slide?.step ?? "?"}頁 · 步驟${stepLabel(actionIndex)}　${name}`;
+    `參與者畫面顯示中（${kind}）：第${slide?.step ?? "?"}頁 · 步驟${stepLabel(actionIndex)}　${name}`;
 }
 
 // ---- 點數與帳本 ----------------------------------------------------------
@@ -345,6 +466,10 @@ function syncPoints(state) {
   elements.totalPoints.textContent = formatPoints(state.totalPoints);
   elements.remainingPoints.textContent = formatPoints(state.remaining);
   elements.remainingPoints.classList.toggle("negative", state.remaining < 0);
+  // 主動幫助是另一個池，總額由 Excel 的「介入」欄算出來（見 server 的 PROACTIVE_TOTAL）。
+  elements.remainingProactive.textContent =
+    `${formatPoints(state.proactiveRemaining)} / ${formatPoints(state.proactiveTotal)}`;
+  elements.remainingProactive.classList.toggle("negative", state.proactiveRemaining < 0);
 }
 
 function syncLedger(state) {
@@ -353,16 +478,20 @@ function syncLedger(state) {
   elements.undoButton.disabled = entries.length === 0;
 
   // 每一列都要顯示「當下餘額」，所以由頭往後累加一次。
-  let running = state.totalPoints;
+  // 兩個池各自累加，每一列只顯示自己那一池的餘額 ——
+  // 「不接受」會產生兩列（主動 −N、可指揮 +N），規則就攤在紀錄上。
+  const running = { assist: state.totalPoints, proactive: state.proactiveTotal };
   const rows = entries.map((entry) => {
-    running += entry.delta;
+    const pool = entry.pool === "proactive" ? "proactive" : "assist";
+    running[pool] += entry.delta;
     const item = document.createElement("li");
-    item.className = `ledger-row ${entry.delta < 0 ? "minus" : "plus"}`;
+    item.className = `ledger-row ${entry.delta < 0 ? "minus" : "plus"} pool-${pool}`;
     item.append(
       Object.assign(document.createElement("span"), { className: "ledger-time", textContent: formatTime(entry.ts) }),
+      Object.assign(document.createElement("span"), { className: "ledger-pool", textContent: pool === "proactive" ? "主動" : "可指揮" }),
       Object.assign(document.createElement("span"), { className: "ledger-note", textContent: entry.note }),
       Object.assign(document.createElement("span"), { className: "ledger-delta", textContent: formatDelta(entry.delta) }),
-      Object.assign(document.createElement("span"), { className: "ledger-balance", textContent: `→ ${formatPoints(running)}` }),
+      Object.assign(document.createElement("span"), { className: "ledger-balance", textContent: `→ ${formatPoints(running[pool])}` }),
     );
     return item;
   });
@@ -439,7 +568,10 @@ elements.adjustForm.addEventListener("submit", (event) => {
   adjustPoints(-1);
 });
 
-elements.overlayClose.addEventListener("click", () => dispatch({ type: "setHelpOverlay", key: null }));
+elements.overlayClose.addEventListener("click", () => {
+  const proactive = elements.overlayStatus.dataset.mode === "proactive";
+  dispatch({ type: proactive ? "setProactiveOverlay" : "setHelpOverlay", key: null });
+});
 
 elements.undoButton.addEventListener("click", () => dispatch({ type: "undoLedger" }));
 elements.resetButton.addEventListener("click", () => {

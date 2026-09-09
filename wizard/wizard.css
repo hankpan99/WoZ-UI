@@ -15,6 +15,10 @@
   --helped-border: #d99b1c;
   --helped-bg: #fdf6e6;
   --helped-badge-text: #8a5c00;
+  /* 助手主動提議：跟「助手介入」的琥珀色分開，用藍色系。 */
+  --proactive-border: #3f7cae;
+  --proactive-bg: #eaf2f9;
+  --proactive-text: #1f4f76;
   --done-bg: #f0f1ed;
   --plus: #2f6b46;
   --minus: #b3372c;
@@ -177,6 +181,9 @@ h2, h3 { margin: 0; }
 }
 .overlay-status[hidden] { display: none; }
 .overlay-status-dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--helped-border); }
+/* 顯示中的是主動提議卡時換成藍色，跟卡片本身一致。 */
+.overlay-status[data-mode="proactive"] { border-bottom-color: var(--proactive-border); background: var(--proactive-bg); color: var(--proactive-text); }
+.overlay-status[data-mode="proactive"] .overlay-status-dot { background: var(--proactive-border); }
 .overlay-status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .overlay-status .ghost-button { margin-left: auto; flex-shrink: 0; }
 
@@ -242,6 +249,48 @@ h2, h3 { margin: 0; }
 .overlay-button.is-on { color: var(--white); border-color: var(--helped-border); background: var(--helped-border); }
 .step-row.is-showing { box-shadow: 0 0 0 2px var(--helped-border); }
 
+/* ===== 助手主動提議 ===== */
+/* 只有 Excel「介入」欄標過 O 的步驟才有這一列。 */
+.proactive-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--proactive-border);
+}
+.proactive-tag { color: var(--proactive-text); font-size: .8rem; font-weight: 800; white-space: nowrap; }
+/* .help-row 的按鈕靠 margin-left:auto 推到最右邊；這一列改由回應按鈕來推。 */
+.proactive-row .overlay-button { margin-left: 0; }
+.proactive-row .overlay-button:hover:not(:disabled) { border-color: var(--proactive-border); background: var(--proactive-bg); }
+.proactive-row .overlay-button.is-on { border-color: var(--proactive-border); background: var(--proactive-border); }
+.proactive-row .cost-input:disabled { color: var(--proactive-text); }
+
+.answer-button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--white);
+  font-size: .8rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.answer-button.accept { margin-left: auto; }
+.answer-button.accept:hover { border-color: var(--plus); background: #eef6f1; }
+.answer-button.decline:hover { border-color: var(--minus); background: #fbeeec; }
+.answer-button.accept.is-on { color: var(--white); border-color: var(--plus); background: var(--plus); }
+.answer-button.decline.is-on { color: var(--white); border-color: var(--minus); background: var(--minus); }
+
+/* 有主動提議的步驟：左緣一條藍線，wizard 一眼掃得到那 14 個步驟。 */
+.step-row.has-proactive { box-shadow: inset 3px 0 0 var(--proactive-border); }
+.step-row.is-proactive-accepted { border-color: var(--proactive-border); background: var(--proactive-bg); }
+.step-row.is-proactive-declined { border-color: var(--proactive-border); }
+.step-row.is-proactive-showing { box-shadow: inset 3px 0 0 var(--proactive-border), 0 0 0 2px var(--proactive-border); }
+/* 已完成／已介入的底色要壓過主動提議的底色，維持既有的優先順序。 */
+.step-row.is-done.is-proactive-accepted { background: var(--done-bg); }
+.step-row.is-helped.is-proactive-accepted { background: var(--helped-bg); }
+
 /* ===== 詳細步驟 ===== */
 
 .detail-block { display: grid; gap: 6px; padding-top: 3px; }
@@ -301,16 +350,24 @@ h2, h3 { margin: 0; }
 /* 沒有勾＝這次不代勞，參與者的說明卡上不會出現這一條。 */
 .detail-check:has(input:not(:checked)) .detail-check-index,
 .detail-check:has(input:not(:checked)) .detail-check-text { color: var(--muted); text-decoration: line-through; }
+/* 在主動提議範圍內的那幾條：編號前加一個藍點。只是記號，不影響勾選。 */
+.detail-check.is-proactive .detail-check-index::before { margin-right: 3px; color: var(--proactive-border); content: "●"; font-size: .7em; }
 
 /* ===== 點數面板 ===== */
 
 .points-panel { grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; }
 
+/* 三個數字：總點數／可指揮各半，主動幫助自己一整列（標題長，也是實驗中要盯的數字）。 */
 .points-readout { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
-.points-box { display: grid; gap: 4px; padding: 14px 16px; background: var(--white); }
+.points-box.proactive { grid-column: 1 / -1; }
+.points-box { display: grid; gap: 4px; align-content: start; padding: 14px 16px; background: var(--white); }
 .points-box.accent { background: var(--blue-light); }
+.points-box.proactive { background: var(--proactive-bg); }
+.points-box.proactive .points-value { color: var(--proactive-text); }
 .points-label { color: var(--muted); font-size: .85rem; font-weight: 650; }
 .points-value { font-size: 2.1rem; line-height: 1; font-variant-numeric: tabular-nums; }
+/* 主動那格是「剩餘 / 總額」兩個數字，字級要小一點才放得下。 */
+.points-box.proactive .points-value { font-size: 1.6rem; }
 .points-value.negative { color: var(--minus); }
 
 .adjust { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
@@ -328,7 +385,8 @@ h2, h3 { margin: 0; }
 .ledger { display: grid; grid-auto-rows: max-content; gap: 4px; min-height: 0; margin: 0; padding: 0 16px 12px; overflow-y: auto; list-style: none; scrollbar-width: thin; }
 .ledger-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* 時間 / 池別 / 說明 / 增減 / 該池餘額 */
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: baseline;
   padding: 7px 9px;
@@ -337,6 +395,9 @@ h2, h3 { margin: 0; }
   font-size: .84rem;
 }
 .ledger-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* 每一列標明算在哪一池 —— 「不接受」會同時出現一列主動與一列可指揮。 */
+.ledger-pool { padding: 1px 6px; border-radius: 99px; background: var(--blue-light); color: var(--blue); font-size: .72rem; font-weight: 750; white-space: nowrap; }
+.ledger-row.pool-proactive .ledger-pool { color: var(--proactive-text); background: var(--proactive-bg); }
 .ledger-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ledger-delta { font-weight: 800; font-variant-numeric: tabular-nums; }
 .ledger-row.plus .ledger-delta { color: var(--plus); }
