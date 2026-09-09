@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RECIPE_DATA = PROJECT_ROOT / "data" / "recipe-data.js"
 
 # 參與者的總點數（原本 app.js 的 STARTING_POINTS）。
-TOTAL_POINTS = 100
+TOTAL_POINTS = 200
 # 讀不到 data/recipe-data.js 時的頁數 fallback。
 FALLBACK_SLIDE_COUNT = 20
 

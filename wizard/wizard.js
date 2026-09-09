@@ -136,7 +136,7 @@ function buildStepList() {
       }
       title.append(Object.assign(document.createElement("span"), {
         className: "step-list-price",
-        textContent: `原價 ${formatPoints(action.cost)} 點`,
+        textContent: `原價 ${formatPoints(action.cost)} $`,
       }));
 
       const helpRow = document.createElement("div");
@@ -211,7 +211,7 @@ function buildDetailBlock(key, details) {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "detail-toggle";
-  toggle.append(caret, Object.assign(document.createElement("span"), { textContent: "詳細步驟" }), count);
+  toggle.append(caret, Object.assign(document.createElement("span"), { textContent: "詳細動作" }), count);
   // 純展開／收合，不動任何實驗資料，所以直接用手上的狀態重畫就好。
   toggle.addEventListener("click", () => {
     if (expandedKeys.has(key)) expandedKeys.delete(key);

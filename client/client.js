@@ -5,12 +5,15 @@
 // 這裡只用來寫例外，key 的寫法一樣，會蓋過 images/steps/ 掃到的檔案。
 // 例如：{ "3-2": "/images/special/whisk.jpg", "5": "/images/clean.jpg" }
 const STEP_IMAGES = {};
-const MEAL_ICONS = [
-  { keyword: "巴斯克蛋糕", src: "/images/icon/cake.png", alt: "巴斯克蛋糕" },
-  { keyword: "吐司", src: "/images/icon/toast.png", alt: "法式吐司" },
-  { keyword: "優格", src: "/images/icon/yogurt.png", alt: "水果優格" },
-];
+// 每個階段的圖示平常不用寫在這裡：把檔案命名成「頁碼」「餐點-階段」或「階段」
+// 丟進 images/icon/ 即可（例如 images/icon/巴斯克蛋糕-製作.jpeg）。
+// 這張表是最後的退路，用餐點名稱的關鍵字比對，空的就代表不用退路。
+// 例如：[{ keyword: "巴斯克蛋糕", src: "/images/icon/cake.jpeg", alt: "巴斯克蛋糕" }]
+const MEAL_ICONS = [];
 const slides = window.RECIPE_SLIDES || [];
+// 上方花費卡要不要顯示「此步驟剩餘動作所需花費點數」那一行。
+// false ＝ 整行（標題與數字）都不出現，只留「實驗剩餘動作所需花費點數」。
+const SHOW_STEP_COST = false;
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
 // 詳細步驟先直向排成一欄，放不下才多開一欄，最多這麼多欄。
@@ -18,17 +21,18 @@ const MAX_DONE_ABOVE = 2;
 const MAX_HELP_COLUMNS = 3;
 const MAX_DETAIL_COLUMNS = 2;
 const {
-  actionKey, formatPoints, cleanLabel, slideCost, pickedDetails,
+  actionKey, formatPoints, cleanLabel, pickedDetails,
 } = window.WozFormat;
 
 const elements = {
+  stepCost: document.querySelector("#step-cost"),
+  stepCostLabel: document.querySelector("#step-cost-label"),
+  stepCostValue: document.querySelector("#step-cost-value"),
   remainingCost: document.querySelector("#remaining-cost"),
   remainingPoints: document.querySelector("#remaining-points"),
   currentStep: document.querySelector("#current-step"),
   stepTotal: document.querySelector("#step-total"),
   progressBar: document.querySelector("#progress-bar"),
-  stageDone: document.querySelector("#stage-done"),
-  stageTotal: document.querySelector("#stage-total"),
   mealName: document.querySelector("#top-meal"),
   stageName: document.querySelector("#top-stage"),
   mealIconWrap: document.querySelector("#meal-icon-wrap"),
@@ -74,15 +78,22 @@ function updateRemainingPoints() {
   elements.remainingPoints.textContent = remaining == null ? "—" : formatPoints(remaining);
 }
 
-function updateStageProgress() {
-  const total = slides[currentIndex]?.actions.length || 0;
-  const done = slides[currentIndex]?.actions.reduce(
-    (count, _action, index) => count + (doneKeys.has(actionKey(currentIndex, index)) ? 1 : 0),
+// 一頁裡「還沒完成」的動作要花多少點。
+function pendingCost(slideIndex) {
+  return (slides[slideIndex]?.actions || []).reduce(
+    (sum, action, index) =>
+      sum + (doneKeys.has(actionKey(slideIndex, index)) ? 0 : action.cost),
     0,
-  ) || 0;
+  );
+}
 
-  elements.stageDone.textContent = formatPoints(done);
-  elements.stageTotal.textContent = ` / ${total}`;
+// 兩個花費都只算「還沒完成」的動作，所以控制台每勾一個完成就會跟著往下掉。
+// 「實驗剩餘」算全部頁面，不看目前在第幾頁 —— 這樣翻頁不會讓數字忽上忽下。
+function updateCosts() {
+  if (SHOW_STEP_COST) elements.stepCost.textContent = formatPoints(pendingCost(currentIndex));
+  elements.remainingCost.textContent = formatPoints(
+    slides.reduce((sum, _slide, index) => sum + pendingCost(index), 0),
+  );
 }
 
 function updateScrollCue() {
@@ -245,7 +256,7 @@ function renderActions(slide) {
     if (action.cost > 0) {
       const cost = document.createElement("span");
       cost.className = "cost-pill";
-      cost.textContent = `${formatPoints(action.cost)} 點`;
+      cost.textContent = `${formatPoints(action.cost)} $`;
       tags.append(cost);
     }
 
@@ -269,19 +280,40 @@ function syncActionStates() {
     syncHelpBadge(button, helpedKeys.has(key));
   });
   updateRemainingPoints();
-  updateStageProgress();
+  updateCosts();
   highlightCurrentStep();
   autoScroll(false);
+}
+
+// 這一頁的階段圖示。檔名依序試「頁碼」→「餐點-階段」→「階段」，
+// 都沒有才退回 MEAL_ICONS 的餐點關鍵字比對。
+function showStageIcon(slide) {
+  const mealName = cleanLabel(slide.meal);
+  const stageName = cleanLabel(slide.stage);
+  const scanned = window.WozImages.icon(
+    slide.step,
+    [mealName, stageName].filter(Boolean).join("-"),
+    stageName,
+  );
+  const fallback = MEAL_ICONS.find(({ keyword }) => mealName.includes(keyword));
+
+  if (scanned || fallback) {
+    elements.mealIcon.src = scanned || fallback.src;
+    elements.mealIcon.alt = [mealName, stageName].filter(Boolean).join(" ");
+    elements.mealIconWrap.hidden = false;
+  } else {
+    elements.mealIcon.removeAttribute("src");
+    elements.mealIcon.alt = "";
+    elements.mealIconWrap.hidden = true;
+  }
 }
 
 function render() {
   if (!slides.length) return;
   const slide = slides[currentIndex];
-  const futureCost = slides.slice(currentIndex).reduce((sum, item) => sum + slideCost(item), 0);
 
-  elements.remainingCost.textContent = formatPoints(futureCost);
+  updateCosts();
   updateRemainingPoints();
-  updateStageProgress();
   elements.currentStep.textContent = slide.step;
   elements.stepTotal.textContent = ` / ${slides.length}`;
   elements.progressBar.style.width = `${((currentIndex + 1) / slides.length) * 100}%`;
@@ -293,16 +325,7 @@ function render() {
   elements.stageName.textContent = stageName;
   elements.stageName.hidden = !stageName;
 
-  const icon = MEAL_ICONS.find(({ keyword }) => mealName.includes(keyword));
-  if (icon) {
-    elements.mealIcon.src = icon.src;
-    elements.mealIcon.alt = icon.alt;
-    elements.mealIconWrap.hidden = false;
-  } else {
-    elements.mealIcon.removeAttribute("src");
-    elements.mealIcon.alt = "";
-    elements.mealIconWrap.hidden = true;
-  }
+  showStageIcon(slide);
 
   renderActions(slide);
   highlightCurrentStep();
@@ -401,6 +424,10 @@ elements.stepImage.addEventListener("error", () => {
   elements.stepImage.hidden = true;
   elements.imagePlaceholder.hidden = false;
 });
+// 階段圖示同理：載不到就整個藏起來，只留階段名稱。
+elements.mealIcon.addEventListener("error", () => {
+  elements.mealIconWrap.hidden = true;
+});
 elements.actionList.addEventListener("scroll", updateScrollCue, { passive: true });
 window.addEventListener("resize", () => {
   updateScrollCue();
@@ -442,9 +469,16 @@ window.WozStore.onStatus((status) => {
 });
 window.WozStore.subscribe(applyState);
 
+// 這一行的開關只在載入時決定一次，不會中途變。
+elements.stepCostLabel.hidden = !SHOW_STEP_COST;
+elements.stepCostValue.hidden = !SHOW_STEP_COST;
+
 // 還沒收到第一份狀態前先畫一次，避免畫面空白。
 render();
 
-// 圖片清單晚一點才回來，回來後把目前預覽中的那張補上。
-window.WozImages.onLoad(() => showImage(previewIndex));
+// 圖片清單晚一點才回來，回來後把步驟圖與階段圖示都補上。
+window.WozImages.onLoad(() => {
+  showImage(previewIndex);
+  if (slides[currentIndex]) showStageIcon(slides[currentIndex]);
+});
 window.WozImages.load();

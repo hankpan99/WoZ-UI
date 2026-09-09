@@ -44,18 +44,22 @@
   --plate-shadow: rgba(55, 67, 51, .1);
 
   /* ===== 常用版面設定：請從這裡調整 ===== */
-  --top-panel-height: 160px;
+  --top-panel-height: 200px;
   --top-panel-height-compact: 118px;
   --fullscreen-width: 76px;
   --cost-panel-width: 1fr;
-  --points-panel-width: .8fr;
-  --step-panel-width: 1.3fr;
-  --stat-label-size: 2rem;
-  --stat-value-size: clamp(2.3rem, 3.5vw, 3.2rem);
+  --points-panel-width: 1fr;
+  --step-panel-width: 1.15fr;
+  --stat-label-size: 2.3rem;
+  --stat-value-size: 3rem;
   --stat-unit-size: 1.25rem;
-  --meal-label-size: 1.5rem;
-  --stage-name-size: 1.5rem;
-  --stage-hint-size: .95rem;
+  --meal-label-size: 2.3rem;
+  --stage-name-size: 2.3rem;
+  /* 花費卡。預設跟其他卡一樣大；如果打開 client.js 的 SHOW_STEP_COST
+     變成兩行後覺得太擠，就把這兩個調小（會只影響這張卡）。 */
+  --cost-row-gap: 10px;
+  --cost-label-size: 2.3rem;
+  --cost-value-size: 3rem;
   --progress-count-size: 1.15rem;
   --step-name-size: 2rem;
   --step-index-size: 1.4rem;
@@ -70,9 +74,11 @@
   --detail-text-size: 1.2rem;
   --detail-row-gap: 12px;
   --detail-column-gap: 28px;
-  --meal-icon-width: clamp(100px, 10vw, 160px);
-  --meal-icon-height: 90px;
-  --meal-icon-height-compact: 76px;
+  /* 階段圖示。高度 auto ＝ 吃滿整張卡（扣掉 padding）；寬度是上限，
+     圖片維持原比例縮到剛好放得下，不會變形也不會裁切。 */
+  --meal-icon-width: clamp(120px, 14vw, 260px);
+  --meal-icon-height: auto;
+  --meal-icon-height-compact: auto;
   /* 整頁說明卡（接受幫助時浮出來的那張）。
      詳細步驟固定直向排列，放不下才自動多開一欄，最多幾欄看 client.js 的
      MAX_HELP_COLUMNS。 */
@@ -118,7 +124,8 @@ button { color: inherit; }
 .stats {
   position: relative;
   display: grid;
-  grid-template-columns: var(--fullscreen-width) var(--cost-panel-width) var(--points-panel-width) var(--step-panel-width);
+  /* 左到右：全螢幕鈕 / 階段＋圖片 / 兩行花費 / 剩餘點數 */
+  grid-template-columns: var(--fullscreen-width) var(--step-panel-width) var(--cost-panel-width) var(--points-panel-width);
   gap: 1px;
   height: 100%;
   margin: 0;
@@ -137,19 +144,29 @@ button { color: inherit; }
   padding: 19px 26px;
   background: var(--white);
 }
-.step-card { grid-template-columns: minmax(0, 1fr) auto auto; }
+/* 花費卡有兩行（此步驟／實驗），標題在左、數字靠右。 */
+.cost-card { align-content: center; gap: var(--cost-row-gap) 20px; }
+.cost-card .stat-label { max-width: none; font-size: var(--cost-label-size); }
+.cost-card .stat-value { font-size: var(--cost-value-size); }
 
 .stat-card.accent { background: var(--blue-light); }
 .stat-copy { min-width: 0; }
 .stat-label { display: block; max-width: 12em; color: var(--muted); font-size: var(--stat-label-size); font-weight: 650; line-height: 1.25; letter-spacing: .02em; overflow-wrap: anywhere; }
-.stage-title { display: flex; flex-wrap: nowrap; gap: 10px; align-items: baseline; min-width: 0; }
+/* 餐點與階段各佔一行，卡片才不用做那麼寬，也把寬度讓給右邊的圖示。
+   align-self: center 是因為整張卡用了 stretch（給圖示吃滿高度用的），
+   文字要單獨拉回垂直置中。 */
+.stage-title { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; align-self: center; min-width: 0; }
 .stage-title .stat-label { max-width: none; font-size: var(--stage-name-size); white-space: nowrap; }
 .stage-title .meal-label { white-space: nowrap; }
 .stage-title > [hidden] { display: none; }
-.stage-hint { display: block; margin-top: 4px; color: var(--muted); font-size: var(--stage-hint-size); font-weight: 600; letter-spacing: .02em; }
+/* 文字佔自己需要的寬度，剩下的全給圖示；align-items: stretch 讓圖示吃滿卡片高度。 */
+.step-card { grid-template-columns: auto minmax(0, 1fr); align-items: stretch; }
 .meal-label { color: var(--blue); font-size: var(--meal-label-size); font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
 .stat-value { display: block; margin: 0; font-size: var(--stat-value-size); line-height: 1; text-align: right; white-space: nowrap; }
 .stat-value small { color: var(--muted); font-size: var(--stat-unit-size); font-weight: 500; }
+/* 上面兩條的 display: block 會蓋掉瀏覽器內建的 [hidden]，所以要自己寫一次。
+   （client.js 的 SHOW_STEP_COST 用這個把「此步驟剩餘…」整行收掉。） */
+.stat-label[hidden], .stat-value[hidden] { display: none; }
 
 .progress-track {
   width: 100%;
@@ -228,9 +245,11 @@ button { color: inherit; }
   0%, 100% { margin-bottom: 0; }
   50% { margin-bottom: 5px; }
 }
-.meal-icon-wrap { display: flex; flex-shrink: 0; align-items: center; justify-content: flex-end; width: var(--meal-icon-width); height: var(--meal-icon-height); }
+/* 圖片用絕對定位貼滿版位：這樣高度不必靠百分比推算，
+   矮螢幕上也不會算成圖片原始高度而撐破卡片。 */
+.meal-icon-wrap { position: relative; justify-self: end; width: 100%; max-width: var(--meal-icon-width); height: var(--meal-icon-height); }
 .meal-icon-wrap[hidden] { display: none; }
-.meal-icon { width: 100%; height: 100%; object-fit: contain; object-position: right center; }
+.meal-icon { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: right center; }
 .action-list { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--action-gap); height: 100%; min-height: 0; padding: 1px 10px 1px 1px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--card-hover-border) var(--line); }
 .action-list::-webkit-scrollbar { width: 9px; }
 .action-list::-webkit-scrollbar-track { border-radius: 99px; background: var(--line); }
@@ -447,11 +466,10 @@ button { color: inherit; }
 @media (max-height: 760px) {
   .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr) 48px; gap: 10px; padding: 10px 0; }
   .stat-card { padding: 15px 22px; }
-  .stat-value { margin-top: 7px; font-size: 1.8rem; }
+  .stat-value { font-size: 1.8rem; }
   .recipe-stage { padding: 15px 22px 18px; }
   .action-card { min-height: 56px; }
   .detail-panel { padding: 16px 20px; }
-  .stage-hint { margin-top: 2px; }
   .meal-icon-wrap { height: var(--meal-icon-height-compact); }
   :root {
     --help-card-badge-size: 1.2rem;

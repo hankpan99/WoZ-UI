@@ -16,26 +16,24 @@
             <span id="fullscreen-label">全螢幕</span>
           </button>
         </div>
-        <article class="stat-card">
-          <span class="stat-label">剩餘步驟所需花費點數</span>
-          <strong class="stat-value"><span id="remaining-cost">0</span><small> 點</small></strong>
-        </article>
-        <article class="stat-card accent">
-          <span class="stat-label">剩餘點數</span>
-          <strong class="stat-value"><span id="remaining-points">0</span><small> 點</small></strong>
-        </article>
         <article class="stat-card step-card">
-          <div class="stat-copy">
-            <span class="stage-title">
-              <span class="meal-label" id="top-meal"></span>
-              <span class="stat-label" id="top-stage"></span>
-            </span>
-            <span class="stage-hint">本階段已完成步驟</span>
-          </div>
-          <strong class="stat-value"><span id="stage-done">0</span><small id="stage-total"> / 0</small></strong>
+          <span class="stage-title">
+            <span class="meal-label" id="top-meal"></span>
+            <span class="stat-label" id="top-stage"></span>
+          </span>
           <div class="meal-icon-wrap" id="meal-icon-wrap" hidden>
             <img class="meal-icon" id="meal-icon" alt="" />
           </div>
+        </article>
+        <article class="stat-card cost-card">
+          <span class="stat-label" id="step-cost-label">此步驟剩餘動作所需花費點數</span>
+          <strong class="stat-value" id="step-cost-value"><span id="step-cost">0</span><small> $</small></strong>
+          <span class="stat-label">剩餘所有動作需花費點數</span>
+          <strong class="stat-value"><span id="remaining-cost">0</span><small> $</small></strong>
+        </article>
+        <article class="stat-card accent">
+          <span class="stat-label">剩餘點數</span>
+          <strong class="stat-value"><span id="remaining-points">0</span><small> $</small></strong>
         </article>
       </section>
 
@@ -50,7 +48,7 @@
               </div>
             </figure>
             <div class="detail-panel">
-              <h2>詳細步驟</h2>
+              <!-- <h2>詳細動作</h2> -->
               <div class="detail-scroll" id="detail-scroll">
                 <ol id="detail-list"></ol>
               </div>
@@ -99,7 +97,7 @@
             <span class="legend-on">黑色字體</span>動作將由助手介入、<span class="legend-off">淺灰色字體</span>則由您獨立完成
           </p>
           <span class="help-card-cost-label">本次花費</span>
-          <strong class="help-card-cost"><span id="help-overlay-cost">0</span><small> 點</small></strong>
+          <strong class="help-card-cost"><span id="help-overlay-cost">0</span><small> $</small></strong>
         </footer>
       </div>
     </div>

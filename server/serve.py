@@ -26,6 +26,7 @@ import state as woz_state
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SESSIONS_DIR = PROJECT_ROOT / "sessions"
 STEP_IMAGE_DIR = PROJECT_ROOT / "images" / "steps"
+STAGE_ICON_DIR = PROJECT_ROOT / "images" / "icon"
 STEP_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 # 檔名格式：<頁>-<步驟>（例如 3-2、03-02）＝第 3 頁第 2 個步驟；
 # 只寫 <頁>（例如 3）＝整頁的預設圖，該頁沒有指定圖的步驟都用它。
@@ -91,6 +92,24 @@ def scan_step_images():
     return images
 
 
+def scan_stage_icons():
+    """掃描 images/icon/，key 就是去掉副檔名的檔名。
+
+    要用哪一個檔名由 client 決定（見 client.js 的 stageIcon）：
+    「頁碼」→「餐點-階段」→「階段」，找到就用。
+    """
+    icons = {}
+    if not STAGE_ICON_DIR.is_dir():
+        return icons
+
+    for path in sorted(STAGE_ICON_DIR.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in STEP_IMAGE_EXTENSIONS:
+            continue
+        icons[path.stem] = f"/images/icon/{quote(path.name)}"
+
+    return icons
+
+
 def local_ip():
     """取得對外的區網 IP（不會真的送出封包）。"""
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -131,7 +150,7 @@ class WozHandler(SimpleHTTPRequestHandler):
                 snapshot = dict(_state)
             self.send_json(snapshot)
         elif self.path.startswith("/api/images"):
-            self.send_json({"images": scan_step_images()})
+            self.send_json({"images": scan_step_images(), "icons": scan_stage_icons()})
         else:
             super().do_GET()
 
