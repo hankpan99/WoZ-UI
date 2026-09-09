@@ -53,12 +53,16 @@ def open_session_log():
 def log_action(action, snapshot):
     if _session_log is None:
         return
+    exported = woz_state.export_payload(snapshot)
     _session_log.write(json.dumps({
         "ts": datetime.datetime.now().isoformat(timespec="milliseconds"),
         "action": action,
         "version": snapshot["version"],
         "currentIndex": snapshot["currentIndex"],
         "remaining": snapshot["remaining"],
+        # 舊欄位保留相容性；另存完整狀態與可直接分析的排序紀錄。
+        "state": snapshot,
+        "records": exported["records"],
     }, ensure_ascii=False) + "\n")
     _session_log.flush()
 
@@ -145,6 +149,11 @@ class WozHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/api/events"):
             self.handle_events()
+        elif self.path.startswith("/api/export"):
+            with _lock:
+                payload = woz_state.export_payload(_state)
+            stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            self.send_download_json(payload, f"woz-records-{stamp}.json")
         elif self.path.startswith("/api/state"):
             with _lock:
                 snapshot = dict(_state)
@@ -217,6 +226,15 @@ class WozHandler(SimpleHTTPRequestHandler):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_download_json(self, payload, filename):
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

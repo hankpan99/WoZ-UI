@@ -109,6 +109,10 @@
   --help-card-cost-label-size: 1.7rem;
   --help-card-cost-size: 3.6rem;
   --help-card-cost-unit-size: .4em;
+  /* 「預覽步驟中」大型 pop-out：要自行調整尺寸就改這三個值。 */
+  --preview-popup-width: min(1100px, calc(100vw - 48px));
+  --preview-popup-height: 190px;
+  --preview-popup-font-size: 3rem;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
 }
 
@@ -318,6 +322,16 @@ button { color: inherit; }
 .action-card.active .action-name { color: var(--active-ink); }
 .action-card.active .action-number { color: var(--active-border); }
 
+/* Wizard 指定 Client 查看中的步驟；外觀獨立於正式的「目前步驟」。 */
+.action-card.client-view {
+  border-color: var(--proactive-border);
+  background: var(--proactive-bg);
+  box-shadow: inset 5px 0 0 var(--proactive-border), 0 0 0 1px var(--proactive-border);
+  transform: translateX(4px);
+}
+.action-card.client-view .action-name,
+.action-card.client-view .action-number { color: var(--proactive-text); }
+
 .action-number { color: var(--action-number); font-size: var(--step-index-size); font-weight: 700; letter-spacing: .08em; }
 .action-name { min-width: 0; font-size: var(--step-name-size); font-weight: 650; line-height: 1.3; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere; }
 /* 卡片右側的標籤群：點數在上、「已介入」在下一行，整組靠最右邊。
@@ -330,6 +344,9 @@ button { color: inherit; }
 .proactive-badge { padding: 7px 11px; border-radius: 99px; color: var(--proactive-text); background: var(--proactive-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
 .action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
+
+/* 預覽走過的動作沿用正式完成的灰階外觀，但不會寫入 server 的 done。 */
+.action-card.preview-seen > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
 .preview-panel { display: grid; grid-template-rows: var(--preview-image-height) minmax(0, 1fr); min-height: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: var(--panel-bg); }
 .image-slot { position: relative; height: 100%; min-height: 0; margin: 0; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--neutral-tint); }
@@ -361,6 +378,35 @@ button { color: inherit; }
 .nav-button.secondary { justify-self: start; background: var(--white); }
 .nav-button.primary { justify-self: end; color: var(--white); border-color: var(--ink); background: var(--ink); }
 .nav-button:disabled { opacity: .3; cursor: not-allowed; }
+
+/* 預覽提示刻意做成不遮住內容的小型 pop-out，左右兩區仍可完整看見。 */
+.preview-status {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 25;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  width: var(--preview-popup-width);
+  min-height: var(--preview-popup-height);
+  padding: 28px 44px;
+  color: var(--white);
+  border: 3px solid rgba(255, 255, 255, .32);
+  border-radius: 30px;
+  background: var(--ink);
+  box-shadow: 0 12px 32px rgba(20, 26, 18, .28);
+  font-size: var(--preview-popup-font-size);
+  letter-spacing: .04em;
+  transform: translateX(-50%);
+  animation: preview-status-in .2s ease;
+}
+.preview-status[hidden] { display: none; }
+@keyframes preview-status-in {
+  from { opacity: 0; transform: translate(-50%, -10px) scale(.98); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
 /* ===== 接受幫助的說明卡：蓋滿整個畫面，期間不能換頁 ===== */
 
 .help-overlay {

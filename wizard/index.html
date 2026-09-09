@@ -29,10 +29,17 @@
         <div class="panel-head">
           <h2>本頁步驟 <span class="panel-count" id="step-count">0 / 0</span></h2>
           <div class="panel-actions">
-            <button class="ghost-button" id="recenter" type="button" title="把參與者畫面的步驟列表捲回定位（上方最多兩個已完成步驟）">↕ 捲回目前步驟</button>
+            <button class="ghost-button" id="view-prev" type="button">↑ 查看上一個</button>
+            <button class="ghost-button" id="view-next" type="button">↓ 查看下一個</button>
+            <button class="ghost-button" id="preview-all" type="button" title="在參與者畫面依序預覽本頁的所有步驟">▶ 預覽全部步驟</button>
             <button class="ghost-button" id="mark-all" type="button">本頁全部完成</button>
             <button class="ghost-button" id="clear-all" type="button">本頁全部取消</button>
           </div>
+        </div>
+        <div class="client-view-status" id="client-view-status" hidden>
+          <span class="client-view-status-dot" aria-hidden="true"></span>
+          <span id="client-view-status-text"></span>
+          <button class="ghost-button" id="client-view-close" type="button">回到目前步驟</button>
         </div>
         <div class="overlay-status" id="overlay-status" hidden>
           <span class="overlay-status-dot" aria-hidden="true"></span>
@@ -48,10 +55,6 @@
         </div>
 
         <div class="points-readout">
-          <div class="points-box">
-            <span class="points-label">總點數</span>
-            <strong class="points-value" id="total-points">—</strong>
-          </div>
           <div class="points-box accent">
             <span class="points-label">剩餘可指揮助手點數</span>
             <strong class="points-value" id="remaining-points">—</strong>
@@ -71,7 +74,10 @@
 
         <div class="ledger-head">
           <h3>紀錄 <span class="panel-count" id="ledger-count">0 筆</span></h3>
-          <button class="ghost-button" id="undo-button" type="button" disabled>↩ 回溯上一筆</button>
+          <div class="ledger-actions">
+            <button class="ghost-button" id="export-button" type="button">⇩ 輸出紀錄</button>
+            <button class="ghost-button" id="undo-button" type="button" disabled>↩ 回溯最後操作</button>
+          </div>
         </div>
         <ol class="ledger" id="ledger"></ol>
 

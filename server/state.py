@@ -129,13 +129,18 @@ def default_state():
         # client 上正在顯示的主動提議卡，或 None。與 helpOverlay 互斥（同時只有一張卡）。
         "proactiveOverlay": None,
         "ledger": [],  # 兩個點數池的唯一來源，每筆用 pool 分辨是哪一池
+        "totalBudget": TOTAL_BUDGET,
         "totalPoints": TOTAL_POINTS,
         "remaining": TOTAL_POINTS,
         "proactiveTotal": PROACTIVE_TOTAL,
         "proactiveRemaining": PROACTIVE_TOTAL,
         "slideCount": SLIDE_COUNT,
-        # wizard 按「捲回目前步驟」時 +1；client 看到號碼變了就重新對齊列表。
-        "scrollNonce": 0,
+        # wizard 按「預覽全部步驟」時 +1；client 以目前頁面開始一輪本機預覽。
+        # nonce 讓連續按同一個指令也能被辨識，不把暫時的預覽狀態寫進實驗資料。
+        "previewNonce": 0,
+        "previewActive": False,
+        # wizard 指定 client 暫時查看的步驟；None 代表跟隨最小的未完成步驟。
+        "clientViewKey": None,
     }
 
 
@@ -304,6 +309,11 @@ def apply_action(state, action):
         if index == state["currentIndex"]:
             return state, False
         state["currentIndex"] = index
+        state["clientViewKey"] = None
+        # 切頁即中止舊頁的預覽，避免 client 繼續播放另一頁的 DOM。
+        if state.get("previewActive"):
+            state["previewActive"] = False
+            state["previewNonce"] = state.get("previewNonce", 0) + 1
 
     elif kind == "setDone":
         key = action.get("key")
@@ -423,6 +433,12 @@ def apply_action(state, action):
 
         current = state["proactive"].get(key)
         if (current or {}).get("status") == status:
+            # 已回答後若重新打開提議卡，再按相同答案仍要把卡片關掉。
+            if status is not None and state.get("proactiveOverlay") == key:
+                _close_overlay_for(state, {key})
+                recalculate(state)
+                state["version"] += 1
+                return state, True
             return state, False
 
         # 沿用 setHelped 的原則：帳本＝目前生效的帳目清單，不記反向帳。
@@ -444,6 +460,8 @@ def apply_action(state, action):
                 state["ledger"].append(
                     _entry("proactive", cost, f"{note} → 退回可指揮點數", key, ASSIST_POOL)
                 )
+            # 不論接受或不接受，答案送出後都立即收起 Client 的提議卡。
+            _close_overlay_for(state, {key})
 
     elif kind == "adjustPoints":
         delta = _to_number(action.get("delta"))
@@ -467,9 +485,38 @@ def apply_action(state, action):
             state["proactive"].pop(key, None)
             _close_overlay_for(state, {key})
 
-    elif kind == "recenter":
-        # 純顯示指令：不改任何實驗資料，只請 client 把步驟列表捲回定位。
-        state["scrollNonce"] += 1
+    elif kind == "setClientView":
+        # wizard 可指定 client 顯示某一步；None 等同回到正式的目前步驟。
+        key = action.get("key")
+        if key is not None and (not isinstance(key, str) or _action_at(key) is None):
+            return state, False
+        if key == state.get("clientViewKey") and not state.get("previewActive", False):
+            return state, False
+        state["clientViewKey"] = key
+        # 指定查看優先於自動預覽；若正在播放就同步停止。
+        if state.get("previewActive", False):
+            state["previewActive"] = False
+            state["previewNonce"] = state.get("previewNonce", 0) + 1
+
+    elif kind == "previewAll":
+        # 同一顆按鈕切換開始／停止；實際播放在 client 執行，不污染完成紀錄。
+        state["previewActive"] = not state.get("previewActive", False)
+        state["previewNonce"] = state.get("previewNonce", 0) + 1
+        if state["previewActive"]:
+            state["clientViewKey"] = None
+            # 預覽不能被既有的說明卡遮住。
+            state["helpOverlay"] = None
+            state["proactiveOverlay"] = None
+
+    elif kind == "finishPreview":
+        # client 自然播完時收掉模式。nonce 防止舊計時器關掉較新的預覽。
+        if (
+            not state.get("previewActive", False)
+            or action.get("nonce") != state.get("previewNonce", 0)
+        ):
+            return state, False
+        state["previewActive"] = False
+        state["previewNonce"] = state.get("previewNonce", 0) + 1
 
     elif kind == "reset":
         previous_version = state["version"]
@@ -494,3 +541,141 @@ def _key_order(key):
         return (slide_index, action_index)
     except ValueError:
         return (10**6, 0)
+
+
+def _export_step_label(index):
+    """匯出檔使用與 UI 相同的 A, B, ... Z, AA ... 步驟編號。"""
+    value = index + 1
+    label = ""
+    while value > 0:
+        value -= 1
+        label = chr(65 + value % 26) + label
+        value //= 26
+    return label
+
+
+def _export_location(key):
+    try:
+        slide_index, action_index = (int(part) for part in key.split(":"))
+        slide = SLIDES[slide_index]
+        action = slide["actions"][action_index]
+    except (AttributeError, ValueError, IndexError, KeyError, TypeError):
+        return None
+    return {
+        "key": key,
+        "pageIndex": slide_index,
+        "page": slide.get("step", slide_index + 1),
+        "stepIndex": action_index,
+        "step": _export_step_label(action_index),
+        "action": action.get("name", ""),
+    }
+
+
+def _export_selection(key, picked):
+    details = action_details(key)
+    selected = set(picked)
+    items = [
+        {"index": index + 1, "text": text}
+        for index, text in enumerate(details)
+    ]
+    return {
+        "partial": bool(details) and len(selected) < len(details),
+        "selectedActions": [item for item in items if item["index"] - 1 in selected],
+        "unselectedActions": [item for item in items if item["index"] - 1 not in selected],
+    }
+
+
+def export_payload(state):
+    """建立最後下載與 session JSONL 共用的完整、可直接分析資料。"""
+    ledger = state.get("ledger") or []
+
+    def timestamp(kind, key):
+        item = next(
+            (entry for entry in ledger if entry.get("kind") == kind and entry.get("key") == key),
+            None,
+        )
+        return item.get("ts") if item else None
+
+    records = []
+    for key, cost in (state.get("helped") or {}).items():
+        location = _export_location(key)
+        if not location:
+            continue
+        records.append({
+            **location,
+            "mode": "1. 被動",
+            "modeCode": 1,
+            "status": "accepted",
+            "cost": cost,
+            "timestamp": timestamp("help", key),
+            "pointChanges": [{"pool": "assist", "delta": -cost}],
+            **_export_selection(key, selected_details(state, key)),
+        })
+
+    for key, result in (state.get("proactive") or {}).items():
+        location = _export_location(key)
+        if not location:
+            continue
+        cost = result.get("cost", 0)
+        changes = [{"pool": "proactive", "delta": -cost}]
+        if result.get("status") == "declined":
+            changes.append({"pool": "assist", "delta": cost})
+        records.append({
+            **location,
+            "mode": "3. 主動",
+            "modeCode": 3,
+            "status": result.get("status"),
+            "cost": cost,
+            "timestamp": timestamp("proactive", key),
+            "pointChanges": changes,
+            **_export_selection(key, action_proactive(key)),
+        })
+
+    for entry in ledger:
+        if entry.get("kind") != "manual":
+            continue
+        records.append({
+            "key": None,
+            "pageIndex": None,
+            "page": None,
+            "stepIndex": None,
+            "step": None,
+            "action": entry.get("note", "手動調整"),
+            "mode": "手動",
+            "modeCode": None,
+            "status": None,
+            "cost": abs(entry.get("delta", 0)),
+            "timestamp": entry.get("ts"),
+            "pointChanges": [{
+                "pool": entry.get("pool", ASSIST_POOL),
+                "delta": entry.get("delta", 0),
+            }],
+            "partial": False,
+            "selectedActions": [],
+            "unselectedActions": [],
+        })
+
+    records.sort(key=lambda record: (
+        record["pageIndex"] if record["pageIndex"] is not None else 10**6,
+        record["stepIndex"] if record["stepIndex"] is not None else 10**6,
+        record["modeCode"] if record["modeCode"] is not None else 10**6,
+        record["timestamp"] or 0,
+    ))
+
+    return {
+        "schemaVersion": 1,
+        "exportedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "totals": {
+            "totalBudget": state.get(
+                "totalBudget",
+                state.get("totalPoints", 0) + state.get("proactiveTotal", 0),
+            ),
+            "assistTotal": state.get("totalPoints", 0),
+            "assistRemaining": state.get("remaining", 0),
+            "proactiveTotal": state.get("proactiveTotal", 0),
+            "proactiveRemaining": state.get("proactiveRemaining", 0),
+        },
+        "records": records,
+        # 原始狀態也保留，方便需要時重建完整實驗狀態；ledger 裡的 timestamp 不會遺失。
+        "state": state,
+    }

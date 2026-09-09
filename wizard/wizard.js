@@ -2,7 +2,7 @@
 // 規則與狀態都在 server/state.py，這一頁不自己算任何東西。
 const slides = window.RECIPE_SLIDES || [];
 const {
-  actionKey, formatPoints, formatDelta, cleanLabel, formatTime, pickedDetails, helpCost,
+  actionKey, formatPoints, formatDelta, cleanLabel, pickedDetails, helpCost,
   proactiveDetails, proactiveCost,
 } = window.WozFormat;
 const { dispatch } = window.WozStore;
@@ -17,10 +17,14 @@ const elements = {
   connLabel: document.querySelector("#conn-label"),
   stepList: document.querySelector("#step-list"),
   stepCount: document.querySelector("#step-count"),
-  recenter: document.querySelector("#recenter"),
+  viewPrev: document.querySelector("#view-prev"),
+  viewNext: document.querySelector("#view-next"),
+  previewAll: document.querySelector("#preview-all"),
+  clientViewStatus: document.querySelector("#client-view-status"),
+  clientViewStatusText: document.querySelector("#client-view-status-text"),
+  clientViewClose: document.querySelector("#client-view-close"),
   markAll: document.querySelector("#mark-all"),
   clearAll: document.querySelector("#clear-all"),
-  totalPoints: document.querySelector("#total-points"),
   remainingPoints: document.querySelector("#remaining-points"),
   remainingProactive: document.querySelector("#remaining-proactive"),
   adjustForm: document.querySelector("#adjust-form"),
@@ -28,6 +32,7 @@ const elements = {
   adjustAdd: document.querySelector("#adjust-add"),
   ledger: document.querySelector("#ledger"),
   ledgerCount: document.querySelector("#ledger-count"),
+  exportButton: document.querySelector("#export-button"),
   undoButton: document.querySelector("#undo-button"),
   resetButton: document.querySelector("#reset-button"),
   overlayStatus: document.querySelector("#overlay-status"),
@@ -54,7 +59,17 @@ const pageLabel = (slide) => {
   return [meal, stage].filter(Boolean).join(" · ");
 };
 
-const stepLabel = (index) => String(index + 1).padStart(2, "0");
+// Wizard 的主步驟與 Client 一致，使用 A, B, ... Z, AA ... 編號。
+function stepLabel(index) {
+  let value = index + 1;
+  let label = "";
+  while (value > 0) {
+    value -= 1;
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26);
+  }
+  return label;
+}
 
 // ---- 頁面切換器 ----------------------------------------------------------
 
@@ -121,7 +136,7 @@ function buildStepList() {
       const title = document.createElement("div");
       title.className = "step-title";
       title.append(
-        Object.assign(document.createElement("span"), { className: "step-index", textContent: stepLabel(index) }),
+        Object.assign(document.createElement("span"), { className: "step-index", textContent: `${stepLabel(index)}.` }),
         Object.assign(document.createElement("span"), { className: "step-name", textContent: action.name }),
       );
       // 讓實驗者一眼看出哪些步驟的圖片檔名有放對。
@@ -141,6 +156,16 @@ function buildStepList() {
         textContent: `原價 ${formatPoints(action.cost)} $`,
       }));
 
+      const clientViewButton = document.createElement("button");
+      clientViewButton.type = "button";
+      clientViewButton.className = "client-view-button";
+      clientViewButton.dataset.role = "client-view";
+      clientViewButton.textContent = "在 Client 顯示";
+      clientViewButton.addEventListener("click", () => {
+        dispatch({ type: "setClientView", key });
+      });
+      title.insertBefore(clientViewButton, title.querySelector(".step-list-price"));
+
       const helpRow = document.createElement("div");
       helpRow.className = "help-row";
 
@@ -155,7 +180,7 @@ function buildStepList() {
       manualCostKeys.delete(key);
 
       const helpLabel = document.createElement("label");
-      helpLabel.className = "check help-check";
+      helpLabel.className = "check help-check intervention-check";
       const helpBox = document.createElement("input");
       helpBox.type = "checkbox";
       helpBox.dataset.role = "helped";
@@ -169,7 +194,7 @@ function buildStepList() {
           note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
         });
       });
-      helpLabel.append(helpBox, Object.assign(document.createElement("span"), { textContent: "助手介入" }));
+      helpLabel.append(helpBox, Object.assign(document.createElement("span"), { textContent: "1. 被動等待" }));
 
       // 說明卡是參與者畫面上那張整頁的框；勾「接受幫助」時會自動叫出來，
       // 這顆是事後再開關用的。
@@ -191,9 +216,10 @@ function buildStepList() {
         overlayButton,
       );
 
-      body.append(title, helpRow);
+      body.append(title);
       const proactiveRow = buildProactiveRow(key, action, slide, index);
       if (proactiveRow) body.append(proactiveRow);
+      body.append(helpRow);
       const detailBlock = buildDetailBlock(key, action.details || [], proactiveDetails(action));
       if (detailBlock) body.append(detailBlock);
       row.append(doneLabel, body);
@@ -211,6 +237,24 @@ function buildProactiveRow(key, action, slide, index) {
   const row = document.createElement("div");
   row.className = "proactive-row";
 
+  // 與下方「被動等待」使用相同的 TODO checkbox 外觀。
+  // 這個 checkbox 只負責顯示／收起提議卡，接受與扣點仍由右側按鈕決定。
+  const overlayLabel = document.createElement("label");
+  overlayLabel.className = "check proactive-check intervention-check";
+  const overlayBox = document.createElement("input");
+  overlayBox.type = "checkbox";
+  overlayBox.dataset.role = "proactive-overlay";
+  overlayBox.addEventListener("change", () => {
+    dispatch({ type: "setProactiveOverlay", key: overlayBox.checked ? key : null });
+  });
+  overlayLabel.append(
+    overlayBox,
+    Object.assign(document.createElement("span"), {
+      textContent: `3. 詢問後實體介入 ${marks.length}/${(action.details || []).length}`,
+      title: `第${slide.step}頁 · 步驟${stepLabel(index)} 在 Excel「介入」欄標了 ${marks.length} 條`,
+    }),
+  );
+
   const cost = proactiveCost(action);
   const costInput = document.createElement("input");
   costInput.className = "cost-input";
@@ -218,17 +262,6 @@ function buildProactiveRow(key, action, slide, index) {
   costInput.step = "any";
   costInput.dataset.role = "proactive-cost";
   costInput.value = String(cost);
-
-  // 顯示提議卡 / 收起來。比照「助手介入」那一列的說明卡按鈕。
-  const overlayButton = document.createElement("button");
-  overlayButton.type = "button";
-  overlayButton.className = "overlay-button";
-  overlayButton.dataset.role = "proactive-overlay";
-  overlayButton.textContent = "顯示提議卡";
-  overlayButton.addEventListener("click", () => {
-    const showing = overlayButton.classList.contains("is-on");
-    dispatch({ type: "setProactiveOverlay", key: showing ? null : key });
-  });
 
   // 參與者口頭回答，wizard 在這裡代按。
   // 接受＝主動池扣點；不接受＝主動池一樣扣，但等額退進可指揮池。
@@ -260,12 +293,7 @@ function buildProactiveRow(key, action, slide, index) {
   });
 
   row.append(
-    Object.assign(document.createElement("span"), {
-      className: "proactive-tag",
-      textContent: `🤖 主動提議 ${marks.length}/${(action.details || []).length}`,
-      title: `第${slide.step}頁 · 步驟${stepLabel(index)} 在 Excel「介入」欄標了 ${marks.length} 條`,
-    }),
-    overlayButton,
+    overlayLabel,
     Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
     costInput,
     Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
@@ -403,6 +431,11 @@ function syncStepList(state) {
     row.classList.toggle("is-done", isDone);
     row.classList.toggle("is-helped", isHelped);
     row.classList.toggle("is-showing", isShowing);
+    const isClientView = state.clientViewKey === key;
+    row.classList.toggle("is-client-view", isClientView);
+    const clientViewButton = row.querySelector('[data-role="client-view"]');
+    clientViewButton.classList.toggle("is-on", isClientView);
+    clientViewButton.textContent = isClientView ? "Client 查看中" : "在 Client 顯示";
 
     syncProactiveRow(row, key, action, proactive[key], proactiveOverlayKey === key);
   });
@@ -417,8 +450,8 @@ function syncStepList(state) {
 
 // 沒有主動提議的步驟不會有這一列，直接跳過。
 function syncProactiveRow(row, key, action, entry, isShowing) {
-  const overlayButton = row.querySelector('[data-role="proactive-overlay"]');
-  if (!overlayButton) return;
+  const overlayBox = row.querySelector('[data-role="proactive-overlay"]');
+  if (!overlayBox) return;
 
   const status = entry?.status || null;
   const costInput = row.querySelector('[data-role="proactive-cost"]');
@@ -428,8 +461,7 @@ function syncProactiveRow(row, key, action, entry, isShowing) {
   }
   costInput.disabled = Boolean(status);
 
-  overlayButton.classList.toggle("is-on", isShowing);
-  overlayButton.textContent = isShowing ? "隱藏提議卡" : "顯示提議卡";
+  overlayBox.checked = isShowing;
 
   row.querySelector('[data-role="accept"]').classList.toggle("is-on", status === "accepted");
   row.querySelector('[data-role="decline"]').classList.toggle("is-on", status === "declined");
@@ -460,11 +492,32 @@ function syncOverlayStatus(state) {
     `參與者畫面顯示中（${kind}）：第${slide?.step ?? "?"}頁 · 步驟${stepLabel(actionIndex)}　${name}`;
 }
 
+function syncClientViewStatus(state) {
+  const key = state.clientViewKey || null;
+  elements.clientViewStatus.hidden = !key;
+
+  const actions = slides[currentIndex]?.actions || [];
+  const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
+  const action = slides[slideIndex]?.actions[actionIndex];
+  if (key && action) {
+    elements.clientViewStatusText.textContent =
+      `Client 正在查看：步驟 ${stepLabel(actionIndex)}　${action.name}`;
+  }
+
+  const done = new Set(state.done || []);
+  const firstUndone = actions.findIndex((_action, index) =>
+    !done.has(actionKey(currentIndex, index)));
+  const fallback = firstUndone === -1 ? Math.max(0, actions.length - 1) : firstUndone;
+  const viewed = slideIndex === currentIndex ? actionIndex : fallback;
+  elements.viewPrev.disabled = !actions.length || viewed <= 0;
+  elements.viewNext.disabled = !actions.length || viewed >= actions.length - 1;
+}
+
 // ---- 點數與帳本 ----------------------------------------------------------
 
 function syncPoints(state) {
-  elements.totalPoints.textContent = formatPoints(state.totalPoints);
-  elements.remainingPoints.textContent = formatPoints(state.remaining);
+  elements.remainingPoints.textContent =
+    `${formatPoints(state.remaining)} / ${formatPoints(state.totalPoints)}`;
   elements.remainingPoints.classList.toggle("negative", state.remaining < 0);
   // 主動幫助是另一個池，總額由 Excel 的「介入」欄算出來（見 server 的 PROACTIVE_TOTAL）。
   elements.remainingProactive.textContent =
@@ -472,27 +525,111 @@ function syncPoints(state) {
   elements.remainingProactive.classList.toggle("negative", state.proactiveRemaining < 0);
 }
 
+function selectionSummary(action, pickedIndexes) {
+  const details = action?.details || [];
+  const picked = new Set(pickedIndexes);
+  const items = details.map((text, index) => ({ index: index + 1, text }));
+  return {
+    partial: details.length > 0 && picked.size < details.length,
+    selected: items.filter((item) => picked.has(item.index - 1)),
+    unselected: items.filter((item) => !picked.has(item.index - 1)),
+  };
+}
+
+function buildLedgerRecords(state) {
+  const ledger = state.ledger || [];
+  const timestampFor = (kind, key) =>
+    ledger.find((entry) => entry.kind === kind && entry.key === key)?.ts ?? null;
+  const records = [];
+
+  Object.entries(state.helped || {}).forEach(([key, cost]) => {
+    const [slideIndex, actionIndex] = key.split(":").map(Number);
+    const slide = slides[slideIndex];
+    const action = slide?.actions[actionIndex];
+    if (!action) return;
+    records.push({
+      key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
+      mode: "1. 被動", modeCode: 1, status: "已介入", action: action.name,
+      ts: timestampFor("help", key),
+      changes: [{ pool: "assist", delta: -cost }],
+      selection: selectionSummary(action, pickedDetails(state, key, (action.details || []).length)),
+    });
+  });
+
+  Object.entries(state.proactive || {}).forEach(([key, result]) => {
+    const [slideIndex, actionIndex] = key.split(":").map(Number);
+    const slide = slides[slideIndex];
+    const action = slide?.actions[actionIndex];
+    if (!action) return;
+    const changes = [{ pool: "proactive", delta: -result.cost }];
+    if (result.status === "declined") changes.push({ pool: "assist", delta: result.cost });
+    records.push({
+      key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
+      mode: "3. 主動", modeCode: 3,
+      status: result.status === "accepted" ? "接受" : "不接受", action: action.name,
+      ts: timestampFor("proactive", key), changes,
+      selection: selectionSummary(action, proactiveDetails(action)),
+    });
+  });
+
+  ledger.filter((entry) => entry.kind === "manual").forEach((entry) => {
+    records.push({
+      key: null, slideIndex: Number.MAX_SAFE_INTEGER, actionIndex: Number.MAX_SAFE_INTEGER,
+      page: "—", step: "—", mode: "手動", modeCode: 99, status: "",
+      action: entry.note, ts: entry.ts,
+      changes: [{ pool: entry.pool || "assist", delta: entry.delta }],
+      selection: { partial: false, selected: [], unselected: [] },
+    });
+  });
+
+  return records.sort((a, b) =>
+    a.slideIndex - b.slideIndex
+    || a.actionIndex - b.actionIndex
+    || a.modeCode - b.modeCode
+    || (a.ts || 0) - (b.ts || 0));
+}
+
+function detailText(items) {
+  return items.length
+    ? items.map((item) => `${String(item.index).padStart(2, "0")} ${item.text}`).join("、")
+    : "無";
+}
+
 function syncLedger(state) {
   const entries = state.ledger || [];
-  elements.ledgerCount.textContent = `${entries.length} 筆`;
+  const records = buildLedgerRecords(state);
+  elements.ledgerCount.textContent = `${records.length} 筆`;
   elements.undoButton.disabled = entries.length === 0;
 
-  // 每一列都要顯示「當下餘額」，所以由頭往後累加一次。
-  // 兩個池各自累加，每一列只顯示自己那一池的餘額 ——
-  // 「不接受」會產生兩列（主動 −N、可指揮 +N），規則就攤在紀錄上。
-  const running = { assist: state.totalPoints, proactive: state.proactiveTotal };
-  const rows = entries.map((entry) => {
-    const pool = entry.pool === "proactive" ? "proactive" : "assist";
-    running[pool] += entry.delta;
+  const rows = records.map((record) => {
     const item = document.createElement("li");
-    item.className = `ledger-row ${entry.delta < 0 ? "minus" : "plus"} pool-${pool}`;
+    item.className = `ledger-row mode-${record.modeCode}`;
+
+    const changes = document.createElement("span");
+    changes.className = "ledger-changes";
+    changes.append(...record.changes.map((change) => Object.assign(document.createElement("span"), {
+      className: `ledger-delta ${change.delta < 0 ? "minus" : "plus"}`,
+      textContent: `${change.pool === "proactive" ? "主動" : "可指揮"} ${formatDelta(change.delta)}`,
+    })));
+
     item.append(
-      Object.assign(document.createElement("span"), { className: "ledger-time", textContent: formatTime(entry.ts) }),
-      Object.assign(document.createElement("span"), { className: "ledger-pool", textContent: pool === "proactive" ? "主動" : "可指揮" }),
-      Object.assign(document.createElement("span"), { className: "ledger-note", textContent: entry.note }),
-      Object.assign(document.createElement("span"), { className: "ledger-delta", textContent: formatDelta(entry.delta) }),
-      Object.assign(document.createElement("span"), { className: "ledger-balance", textContent: `→ ${formatPoints(running[pool])}` }),
+      Object.assign(document.createElement("span"), { className: "ledger-page", textContent: record.page === "—" ? "—" : `第${record.page}頁` }),
+      Object.assign(document.createElement("span"), { className: "ledger-step", textContent: record.step === "—" ? "—" : `${record.step}.` }),
+      Object.assign(document.createElement("span"), { className: "ledger-mode", textContent: record.mode }),
+      Object.assign(document.createElement("span"), { className: "ledger-note", textContent: `${record.action}${record.status ? ` · ${record.status}` : ""}` }),
+      changes,
     );
+
+    if (record.selection.partial) {
+      const banner = document.createElement("div");
+      banner.className = "ledger-partial-banner";
+      banner.append(
+        Object.assign(document.createElement("strong"), { textContent: "部分動作" }),
+        Object.assign(document.createElement("span"), { className: "picked", textContent: `有選：${detailText(record.selection.selected)}` }),
+        Object.assign(document.createElement("span"), { className: "unpicked", textContent: `未選：${detailText(record.selection.unselected)}` }),
+      );
+      item.append(banner);
+    }
     return item;
   });
 
@@ -503,13 +640,18 @@ function syncLedger(state) {
     rows.push(empty);
   }
 
-  elements.ledger.replaceChildren(...rows.reverse());
+  elements.ledger.replaceChildren(...rows);
 }
 
 // ---- 狀態進來時 ----------------------------------------------------------
 
 function applyState(state) {
   currentIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
+
+  const previewing = Boolean(state.previewActive);
+  elements.previewAll.textContent = previewing ? "■ 停止預覽" : "▶ 預覽全部步驟";
+  elements.previewAll.classList.toggle("is-on", previewing);
+  elements.previewAll.setAttribute("aria-pressed", String(previewing));
 
   if (currentIndex !== renderedIndex) {
     buildStepList();
@@ -518,6 +660,7 @@ function applyState(state) {
 
   syncPageToggle(state);
   syncStepList(state);
+  syncClientViewStatus(state);
   syncOverlayStatus(state);
   syncPoints(state);
   syncLedger(state);
@@ -532,6 +675,23 @@ elements.pageNext.addEventListener("click", () => {
   dispatch({ type: "setPage", index: currentIndex + 1 });
 });
 
+function moveClientView(direction) {
+  const state = window.WozStore.state;
+  const actions = slides[currentIndex]?.actions || [];
+  if (!state || !actions.length) return;
+
+  const done = new Set(state.done || []);
+  const firstUndone = actions.findIndex((_action, index) =>
+    !done.has(actionKey(currentIndex, index)));
+  const fallback = firstUndone === -1 ? actions.length - 1 : firstUndone;
+  const [viewSlide, viewAction] = state.clientViewKey
+    ? state.clientViewKey.split(":").map(Number)
+    : [];
+  const base = viewSlide === currentIndex ? viewAction : fallback;
+  const target = Math.max(0, Math.min(actions.length - 1, base + direction));
+  dispatch({ type: "setClientView", key: actionKey(currentIndex, target) });
+}
+
 // 整頁一次送一個 action，避免同時發出一堆請求（瀏覽器對同源的連線數有上限）。
 function setWholePage(value) {
   const slide = slides[currentIndex];
@@ -540,8 +700,12 @@ function setWholePage(value) {
   dispatch({ type: "setDoneBulk", keys, value });
 }
 
-// 參與者自己捲走之後，把他的步驟列表捲回定位。不動任何實驗資料。
-elements.recenter.addEventListener("click", () => dispatch({ type: "recenter" }));
+elements.previewAll.addEventListener("click", () => dispatch({ type: "previewAll" }));
+elements.clientViewClose.addEventListener("click", () => {
+  dispatch({ type: "setClientView", key: null });
+});
+elements.viewPrev.addEventListener("click", () => moveClientView(-1));
+elements.viewNext.addEventListener("click", () => moveClientView(1));
 elements.markAll.addEventListener("click", () => setWholePage(true));
 elements.clearAll.addEventListener("click", () => setWholePage(false));
 
@@ -574,6 +738,14 @@ elements.overlayClose.addEventListener("click", () => {
 });
 
 elements.undoButton.addEventListener("click", () => dispatch({ type: "undoLedger" }));
+elements.exportButton.addEventListener("click", () => {
+  const link = document.createElement("a");
+  link.href = "/api/export";
+  link.download = "";
+  document.body.append(link);
+  link.click();
+  link.remove();
+});
 elements.resetButton.addEventListener("click", () => {
   if (confirm("確定要重置全部狀態嗎？頁面、勾選與所有點數紀錄都會清空。")) {
     dispatch({ type: "reset" });
