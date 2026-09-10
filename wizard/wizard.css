@@ -15,10 +15,16 @@
   --helped-border: #d99b1c;
   --helped-bg: #fdf6e6;
   --helped-badge-text: #8a5c00;
+  /* 被動語音介入使用紫色，與被動實體的琥珀色區分。 */
+  --voice-border: #8a5bb5;
+  --voice-bg: #f2ebf8;
+  --voice-text: #5e3782;
   /* 助手主動提議：跟「助手介入」的琥珀色分開，用藍色系。 */
   --proactive-border: #3f7cae;
   --proactive-bg: #eaf2f9;
   --proactive-text: #1f4f76;
+  /* 主動按鈕寬度＝下方兩顆被動按鈕合計寬度。 */
+  --intervention-controls-width: 300px;
   --done-bg: #f0f1ed;
   --plus: #2f6b46;
   --minus: #b3372c;
@@ -220,6 +226,7 @@ h2, h3 { margin: 0; }
 .step-row.is-helped { border-color: var(--helped-border); background: var(--helped-bg); }
 .step-row.is-done { background: var(--done-bg); }
 .step-row.is-done.is-helped { background: var(--helped-bg); }
+.step-row.is-helped.is-help-voice { border-color: var(--voice-border); background: var(--voice-bg); }
 .step-row.is-done .step-name { color: var(--muted); text-decoration: line-through; }
 
 .check { display: flex; gap: 6px; align-items: center; font-size: .88rem; font-weight: 650; white-space: nowrap; cursor: pointer; user-select: none; }
@@ -245,7 +252,6 @@ h2, h3 { margin: 0; }
 .done-check:hover > span { background: #dbe7dc; }
 .done-check input:checked + span { color: var(--white); background: var(--blue); }
 .done-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
-.help-check input { accent-color: var(--helped-border); }
 .proactive-check input { accent-color: var(--proactive-border); }
 
 .step-body { display: grid; gap: 7px; min-width: 0; }
@@ -274,7 +280,7 @@ h2, h3 { margin: 0; }
 .help-row { display: flex; gap: 8px; align-items: center; min-height: 34px; }
 .intervention-check {
   position: relative;
-  flex: 0 0 245px;
+  flex: 0 0 var(--intervention-controls-width);
   font-size: .86rem;
 }
 /* 介入模式不顯示原生 checkbox；整塊文字色塊就是可點擊的控制項。 */
@@ -295,10 +301,30 @@ h2, h3 { margin: 0; }
 }
 .intervention-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-/* 1＝琥珀色的被動等待。 */
-.help-check > span { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
-.help-check:hover > span,
-.help-check input:checked + span { color: var(--white); background: var(--helped-border); }
+.passive-mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 0 0 var(--intervention-controls-width);
+  gap: 6px;
+}
+.passive-mode-button {
+  padding: 7px 11px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+/* 實體＝琥珀色。 */
+.passive-mode-button.physical { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.passive-mode-button.physical:hover,
+.passive-mode-button.physical.is-on { color: var(--white); background: var(--helped-border); }
+/* 語音＝紫色。 */
+.passive-mode-button.voice { color: var(--voice-text); border-color: var(--voice-border); background: var(--voice-bg); }
+.passive-mode-button.voice:hover,
+.passive-mode-button.voice.is-on { color: var(--white); background: var(--voice-border); }
 .cost-caption { color: var(--muted); font-size: .85rem; font-weight: 600; }
 .cost-input {
   width: 70px;
@@ -313,6 +339,7 @@ h2, h3 { margin: 0; }
 }
 .cost-input:focus { border-color: var(--blue); outline: none; }
 .cost-input:disabled { color: var(--helped-badge-text); background: var(--panel-bg); }
+.step-row.is-help-voice .cost-input:disabled { color: var(--voice-text); }
 
 .overlay-button {
   margin-left: 0;

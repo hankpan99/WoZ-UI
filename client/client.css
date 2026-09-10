@@ -77,7 +77,7 @@
   --points-value-size: 3rem;
   --progress-count-size: 1.15rem;
   --step-name-size: 2rem;
-  --step-index-size: 1.4rem;
+  --step-index-size: 1.5rem;
   --cost-size: 1.5rem;
   --action-gap: 16px;
   /* 步驟圖片版位：佔左側面板的高度比例，其餘給「詳細步驟」。
@@ -97,12 +97,20 @@
   /* 整頁說明卡（接受幫助時浮出來的那張）。
      詳細步驟固定直向排列，放不下才自動多開一欄，最多幾欄看 client.js 的
      MAX_HELP_COLUMNS。 */
-  /* 由上而下：助手介入 → 餐點-階段-步驟N → 步驟名稱 →
+  /* 由上而下：介入模式 → 餐點-階段-步驟N → 步驟名稱 →
      詳細步驟（編號／文字）→ 圖例 → 本次花費（標籤／數字／「點」）。
      每一塊各自一個變數，改哪一塊就改哪一個。 */
-  --help-card-badge-size: 3rem;
-  --help-card-step-size: 1.5rem;
-  --help-card-title-size: 2rem;
+  --help-card-step-size: 2rem;
+  --help-card-title-size: 2.5rem;
+  --help-card-action-size: 1.7rem;
+  /* Popup 寬度會依詳細步驟列數增加：最小值 +（列數 - 1）× 每列增加值，最高不超過最大值。 */
+  --help-card-min-width: 1000px;
+  --help-card-width-per-row: 50px;
+  --help-card-max-width: 1600px;
+  --help-card-min-height: 600px;
+  --help-card-max-height: 100%;
+  --help-card-image-width: 42%;
+  --help-card-image-fit: contain;
   --help-card-index-size: .78em;
   --help-card-item-size: 1.7rem;
   --help-card-legend-size: 1.3rem;
@@ -425,8 +433,9 @@ button { color: inherit; }
   display: grid;
   /* 標頭 / 詳細步驟 / 頁尾 */
   grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(1180px, 100%);
-  max-height: 100%;
+  width: min(var(--help-card-auto-width, var(--help-card-min-width)), 100%);
+  min-height: min(var(--help-card-min-height), 100%);
+  max-height: min(var(--help-card-max-height), 100%);
   overflow: hidden;
   border: 2px solid var(--helped-border);
   border-radius: 26px;
@@ -449,11 +458,11 @@ button { color: inherit; }
   border-bottom: 1px solid var(--line);
   background: var(--helped-bg);
 }
-/* 「助手介入」（與主動提議卡的回應結果）靠左、階段資訊推到最右邊 */
+/* 介入種類與觸發方式合併在同一行，階段資訊推到最右邊。 */
 .help-card-title { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; color: var(--helped-badge-text); }
-.help-card-badge { font-size: var(--help-card-badge-size); font-weight: 800; letter-spacing: .06em; }
 .help-card-step { margin-left: auto; font-size: var(--help-card-step-size); font-weight: 650; }
-.help-card-name { margin: 0; font-size: var(--help-card-title-size); font-weight: 750; line-height: 1.25; overflow-wrap: anywhere; }
+.help-card-name { margin: 0; font-size: var(--help-card-title-size); font-weight: 750; line-height: 1.25; white-space: nowrap; }
+.help-card-action { margin: -2px 0 0; color: var(--ink); font-size: var(--help-card-action-size); font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
 /* 參與者已經回答過的主動提議，把結果標在眉標上。 */
 .help-card-answer { padding: 4px 14px; border-radius: 99px; font-size: var(--help-card-step-size); font-weight: 800; white-space: nowrap; }
 .help-card-answer[hidden] { display: none; }
@@ -465,7 +474,31 @@ button { color: inherit; }
 .help-overlay[data-mode="proactive"] .help-card-head { background: var(--proactive-bg); }
 .help-overlay[data-mode="proactive"] .help-card-title { color: var(--proactive-text); }
 
-.help-card-body { min-height: 0; padding: clamp(18px, 3vh, 30px) clamp(24px, 3vw, 44px); overflow-y: auto; scrollbar-width: thin; }
+.help-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, var(--help-card-image-width)) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 40px);
+  min-height: 0;
+  padding: clamp(18px, 3vh, 30px) clamp(24px, 3vw, 44px);
+  overflow: hidden;
+}
+.help-card-image {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--white);
+}
+.help-card-image img { width: 100%; height: 100%; object-fit: var(--help-card-image-fit); }
+.help-card-image-empty { display: grid; place-items: center; align-content: center; height: 100%; color: var(--placeholder-text); font-size: .9rem; letter-spacing: .05em; }
+.help-card-image-empty[hidden] { display: none; }
+.help-card-image-empty p { margin: 14px 0 0; }
+.help-card-steps { min-width: 0; min-height: 0; padding-right: 8px; overflow-y: auto; scrollbar-width: thin; }
 /* 直向一欄；column-count 由 client.js 的 fitHelpColumns() 在放不下時才加上去，
    多欄時仍然是先填滿左邊那一欄再換下一欄，讀的順序不會亂掉。 */
 .help-card-list {
@@ -550,9 +583,9 @@ button { color: inherit; }
   .detail-panel { padding: 16px 20px; }
   .meal-icon-wrap { height: var(--meal-icon-height-compact); }
   :root {
-    --help-card-badge-size: 1.2rem;
     --help-card-step-size: 1.2rem;
     --help-card-title-size: 1.9rem;
+    --help-card-action-size: 1.3rem;
     --help-card-item-size: 1.35rem;
     --help-card-legend-size: 1rem;
     --help-card-cost-label-size: 1.35rem;

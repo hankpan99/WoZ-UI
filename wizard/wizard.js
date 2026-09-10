@@ -179,22 +179,31 @@ function buildStepList() {
       costInput.addEventListener("input", () => manualCostKeys.add(key));
       manualCostKeys.delete(key);
 
-      const helpLabel = document.createElement("label");
-      helpLabel.className = "check help-check intervention-check";
-      const helpBox = document.createElement("input");
-      helpBox.type = "checkbox";
-      helpBox.dataset.role = "helped";
-      helpBox.addEventListener("change", () => {
-        const cost = Number(costInput.value);
-        dispatch({
-          type: "setHelped",
-          key,
-          value: helpBox.checked,
-          cost: Number.isFinite(cost) ? cost : action.cost,
-          note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
+      const passiveModes = document.createElement("div");
+      passiveModes.className = "passive-mode-buttons";
+      [
+        ["physical", "1. 被動等待 - 實體"],
+        ["voice", "1. 被動等待 - 語音"],
+      ].forEach(([mode, text]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `passive-mode-button ${mode}`;
+        button.dataset.role = "help-mode";
+        button.dataset.mode = mode;
+        button.textContent = text;
+        button.addEventListener("click", () => {
+          const cost = Number(costInput.value);
+          dispatch({
+            type: "setHelped",
+            key,
+            mode,
+            value: !button.classList.contains("is-on"),
+            cost: Number.isFinite(cost) ? cost : action.cost,
+            note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
+          });
         });
+        passiveModes.append(button);
       });
-      helpLabel.append(helpBox, Object.assign(document.createElement("span"), { textContent: "1. 被動等待" }));
 
       // 說明卡是參與者畫面上那張整頁的框；勾「接受幫助」時會自動叫出來，
       // 這顆是事後再開關用的。
@@ -209,7 +218,7 @@ function buildStepList() {
       });
 
       helpRow.append(
-        helpLabel,
+        passiveModes,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
         costInput,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
@@ -381,6 +390,7 @@ function setStepDetails(key, index, value) {
 function syncStepList(state) {
   const done = new Set(state.done);
   const helped = state.helped || {};
+  const helpModes = state.helpModes || {};
   const proactive = state.proactive || {};
   const overlayKey = state.helpOverlay || null;
   const proactiveOverlayKey = state.proactiveOverlay || null;
@@ -395,8 +405,12 @@ function syncStepList(state) {
     const isShowing = overlayKey === key;
 
     row.querySelector('[data-role="done"]').checked = isDone;
-    const helpBox = row.querySelector('[data-role="helped"]');
-    helpBox.checked = isHelped;
+    const helpMode = isHelped ? (helpModes[key] || "physical") : null;
+    row.querySelectorAll('[data-role="help-mode"]').forEach((button) => {
+      const selected = button.dataset.mode === helpMode;
+      button.classList.toggle("is-on", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
 
     // 剛勾成「接受幫助」的步驟自動展開，讓 wizard 可以馬上調要代勞哪幾條。
     if (isHelped && !lastHelpedKeys.has(key)) expandedKeys.add(key);
@@ -430,6 +444,7 @@ function syncStepList(state) {
 
     row.classList.toggle("is-done", isDone);
     row.classList.toggle("is-helped", isHelped);
+    row.classList.toggle("is-help-voice", helpMode === "voice");
     row.classList.toggle("is-showing", isShowing);
     const isClientView = state.clientViewKey === key;
     row.classList.toggle("is-client-view", isClientView);
@@ -547,9 +562,11 @@ function buildLedgerRecords(state) {
     const slide = slides[slideIndex];
     const action = slide?.actions[actionIndex];
     if (!action) return;
+    const helpMode = state.helpModes?.[key] || "physical";
     records.push({
       key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
-      mode: "1. 被動", modeCode: 1, status: "已介入", action: action.name,
+      mode: helpMode === "voice" ? "1. 被動 - 語音" : "1. 被動 - 實體",
+      modeCode: 1, status: "已介入", action: action.name,
       ts: timestampFor("help", key),
       changes: [{ pool: "assist", delta: -cost }],
       selection: selectionSummary(action, pickedDetails(state, key, (action.details || []).length)),

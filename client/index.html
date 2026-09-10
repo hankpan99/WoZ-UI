@@ -89,15 +89,24 @@
       <div class="help-card">
         <header class="help-card-head">
           <div class="help-card-title">
-            <span class="help-card-badge" id="help-overlay-badge">🤖 助手介入</span>
+            <h2 class="help-card-name" id="help-overlay-name"></h2>
             <span class="help-card-step" id="help-overlay-step"></span>
             <span class="help-card-answer" id="help-overlay-answer" hidden></span>
           </div>
-          <h2 class="help-card-name" id="help-overlay-name"></h2>
+          <p class="help-card-action" id="help-overlay-action"></p>
         </header>
-        <div class="help-card-body" id="help-overlay-body">
-          <ol class="help-card-list" id="help-overlay-list"></ol>
-          <p class="help-card-empty" id="help-overlay-empty" hidden>這個步驟沒有更細的動作。</p>
+        <div class="help-card-body">
+          <figure class="help-card-image">
+            <img id="help-overlay-image" alt="" hidden />
+            <div class="help-card-image-empty" id="help-overlay-image-empty">
+              <div class="plate-art"><span></span></div>
+              <p>此步驟沒有圖片</p>
+            </div>
+          </figure>
+          <div class="help-card-steps" id="help-overlay-body">
+            <ol class="help-card-list" id="help-overlay-list"></ol>
+            <p class="help-card-empty" id="help-overlay-empty" hidden>這個步驟沒有更細的動作。</p>
+          </div>
         </div>
         <footer class="help-card-foot">
           <p class="help-card-legend" id="help-overlay-legend" hidden>

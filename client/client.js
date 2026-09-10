@@ -71,11 +71,14 @@ const elements = {
   fullscreenLabel: document.querySelector("#fullscreen-label"),
   previewStatus: document.querySelector("#preview-status"),
   helpOverlay: document.querySelector("#help-overlay"),
+  helpCard: document.querySelector("#help-overlay .help-card"),
   helpOverlayBody: document.querySelector("#help-overlay-body"),
-  helpOverlayBadge: document.querySelector("#help-overlay-badge"),
   helpOverlayStep: document.querySelector("#help-overlay-step"),
   helpOverlayAnswer: document.querySelector("#help-overlay-answer"),
   helpOverlayName: document.querySelector("#help-overlay-name"),
+  helpOverlayAction: document.querySelector("#help-overlay-action"),
+  helpOverlayImage: document.querySelector("#help-overlay-image"),
+  helpOverlayImageEmpty: document.querySelector("#help-overlay-image-empty"),
   helpOverlayList: document.querySelector("#help-overlay-list"),
   helpOverlayEmpty: document.querySelector("#help-overlay-empty"),
   helpOverlayLegend: document.querySelector("#help-overlay-legend"),
@@ -156,8 +159,8 @@ function currentStepIndex() {
 
 // 找某個步驟要用的圖：先看 STEP_IMAGES 的例外設定（步驟優先於整頁），
 // 再看 images/steps/ 掃到的檔案，最後才是 Excel 帶進來的 slide.image。
-function imageFor(actionIndex) {
-  const slide = slides[currentIndex];
+function imageFor(actionIndex, slideIndex = currentIndex) {
+  const slide = slides[slideIndex];
   if (!slide) return "";
   const stepNumber = actionIndex + 1;
   return STEP_IMAGES[`${slide.step}-${stepNumber}`]
@@ -181,6 +184,27 @@ function showImage(actionIndex) {
     elements.stepImage.hidden = true;
     elements.imagePlaceholder.hidden = false;
   }
+}
+
+function showHelpImage(slideIndex, actionIndex) {
+  const slide = slides[slideIndex];
+  const path = imageFor(actionIndex, slideIndex);
+  const showPlaceholder = () => {
+    elements.helpOverlayImage.removeAttribute("src");
+    elements.helpOverlayImage.hidden = true;
+    elements.helpOverlayImageEmpty.hidden = false;
+  };
+
+  if (!path) {
+    showPlaceholder();
+    return;
+  }
+
+  elements.helpOverlayImage.onerror = showPlaceholder;
+  elements.helpOverlayImage.src = path;
+  elements.helpOverlayImage.alt = `${cleanLabel(slide?.meal) || cleanLabel(slide?.stage) || actionIndex + 1}步驟示意圖`;
+  elements.helpOverlayImage.hidden = false;
+  elements.helpOverlayImageEmpty.hidden = true;
 }
 
 // 詳細步驟先直向排成一欄；放不下（會需要捲動）才多開一欄，最多 max 欄。
@@ -472,6 +496,19 @@ function render() {
 const fitHelpColumns = () =>
   fitColumns(elements.helpOverlayBody, elements.helpOverlayList, MAX_HELP_COLUMNS);
 
+function updateHelpCardWidth(detailCount) {
+  const styles = getComputedStyle(document.documentElement);
+  const pixels = (name, fallback) => {
+    const value = Number.parseFloat(styles.getPropertyValue(name));
+    return Number.isFinite(value) ? value : fallback;
+  };
+  const minWidth = pixels("--help-card-min-width", 1000);
+  const widthPerRow = pixels("--help-card-width-per-row", 50);
+  const maxWidth = pixels("--help-card-max-width", 1600);
+  const width = Math.min(maxWidth, minWidth + Math.max(0, detailCount - 1) * widthPerRow);
+  elements.helpCard.style.setProperty("--help-card-auto-width", `${width}px`);
+}
+
 // 整頁的卡片有兩種，共用同一塊 DOM（畫面上同時只會有一張，server 保證互斥）：
 //   assist    ＝ wizard 勾「接受幫助」時浮出來的說明卡，代勞範圍由控制台的勾選決定。
 //   proactive ＝ 助手主動提議卡，代勞範圍寫死在 Excel 的「介入」欄，參與者可以不接受。
@@ -494,6 +531,7 @@ function syncHelpOverlay(state) {
   elements.helpOverlay.dataset.mode = mode;
 
   const details = action.details || [];
+  updateHelpCardWidth(details.length);
   // 主動提議的範圍來自 Excel，不看 helpDetails；兩種幫助各自獨立。
   const picked = new Set(
     isProactive ? proactiveDetails(action) : pickedDetails(state, key, details.length),
@@ -505,8 +543,16 @@ function syncHelpOverlay(state) {
     cleanLabel(slide.stage),
     `步驟${actionIndex + 1}`,
   ].filter(Boolean).join(" - ");
-  elements.helpOverlayName.textContent = action.name;
-  elements.helpOverlayBadge.textContent = isProactive ? "🤖 助手主動提議" : "🤖 助手介入";
+  const passiveMode = state.helpModes?.[key] || "physical";
+  const overlayTitle = isProactive
+    ? "實體介入（3. 詢問後）"
+    : (passiveMode === "voice"
+      ? "語音介入（1. 被動等待）"
+      : "實體介入（1. 被動等待）");
+  // 介入種類與觸發方式合併成單一標題；動作名稱獨立放在下一行。
+  elements.helpOverlayName.textContent = overlayTitle;
+  elements.helpOverlayAction.textContent = action.name;
+  showHelpImage(slideIndex, actionIndex);
 
   // 提議被回答之後就把結果標在卡片上，wizard 收卡前參與者都看得到。
   const answer = isProactive ? state.proactive?.[key]?.status : null;
@@ -660,5 +706,9 @@ render();
 window.WozImages.onLoad(() => {
   showImage(previewIndex);
   if (slides[currentIndex]) showStageIcon(slides[currentIndex]);
+  if (overlayKey) {
+    const [slideIndex, actionIndex] = overlayKey.split(":").map(Number);
+    showHelpImage(slideIndex, actionIndex);
+  }
 });
 window.WozImages.load();

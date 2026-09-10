@@ -120,6 +120,8 @@ def default_state():
         "currentIndex": 0,
         "done": [],  # ["slideIdx:actionIdx"]，→ client 灰階；不影響點數
         "helped": {},  # key -> 該次接受幫助的花費
+        # key -> physical | voice；兩種被動介入互斥，沿用同一筆可指揮點數。
+        "helpModes": {},
         # key -> 這次要代勞的詳細步驟索引。沒有紀錄＝全部勾選（見 selected_details）。
         "helpDetails": {},
         # client 上正在顯示的整頁說明卡，或 None。
@@ -178,7 +180,9 @@ def help_note(state, key):
         step = SLIDES[slide_index]["step"]
     except (ValueError, IndexError, KeyError, TypeError):
         return None
-    note = f"第{step}頁 · 步驟{action_index + 1:02d} 接受幫助"
+    mode = state.get("helpModes", {}).get(key, "physical")
+    mode_label = "語音介入" if mode == "voice" else "實體介入"
+    note = f"第{step}頁 · 步驟{action_index + 1:02d} {mode_label}"
     total = len(action_details(key))
     picked = len(selected_details(state, key))
     return note if picked == total else f"{note}（{picked}/{total} 動作）"
@@ -350,13 +354,25 @@ def apply_action(state, action):
         if not isinstance(key, str):
             return state, False
         if action.get("value"):
+            mode = action.get("mode")
+            mode = mode if mode in ("physical", "voice") else "physical"
+            help_modes = state.setdefault("helpModes", {})
             # 預設花費由勾選中的詳細步驟算出；wizard 手動打過的數字仍然優先。
             cost = _to_number(action.get("cost"), help_cost(state, key))
             if key in state["helped"]:
-                return state, False
-            state["helped"][key] = cost
-            note = help_note(state, key) or action.get("note") or f"步驟 {key} 接受幫助"
-            state["ledger"].append(_entry("help", -cost, note, key))
+                # 實體／語音互相切換只更新模式，不重複扣點。
+                if help_modes.get(key, "physical") == mode:
+                    return state, False
+                help_modes[key] = mode
+                note = help_note(state, key)
+                for item in state["ledger"]:
+                    if item["kind"] == "help" and item.get("key") == key and note:
+                        item["note"] = note
+            else:
+                help_modes[key] = mode
+                state["helped"][key] = cost
+                note = help_note(state, key) or action.get("note") or f"步驟 {key} 接受幫助"
+                state["ledger"].append(_entry("help", -cost, note, key))
             # 勾起來的當下就把說明卡推到參與者畫面上；
             # 畫面上只放得下一張卡，所以主動提議卡要讓位。
             state["helpOverlay"] = key
@@ -365,6 +381,7 @@ def apply_action(state, action):
             if key not in state["helped"]:
                 return state, False
             del state["helped"][key]
+            state.setdefault("helpModes", {}).pop(key, None)
             # 取消勾選＝直接把那筆帳目拿掉，不記反向帳，
             # 這樣帳本與勾選狀態永遠一致、回溯也永遠可預期。
             state["ledger"] = [
@@ -476,6 +493,7 @@ def apply_action(state, action):
         removed = state["ledger"].pop()
         if removed["kind"] == "help":
             state["helped"].pop(removed.get("key"), None)
+            state.setdefault("helpModes", {}).pop(removed.get("key"), None)
             _close_overlay_for(state, {removed.get("key")})
         elif removed["kind"] == "proactive":
             # 「不接受」記了兩筆（主動池扣、可指揮池退），
@@ -601,10 +619,12 @@ def export_payload(state):
         location = _export_location(key)
         if not location:
             continue
+        help_mode = state.get("helpModes", {}).get(key, "physical")
         records.append({
             **location,
-            "mode": "1. 被動",
+            "mode": "1. 被動 - 語音" if help_mode == "voice" else "1. 被動 - 實體",
             "modeCode": 1,
+            "helpMode": help_mode,
             "status": "accepted",
             "cost": cost,
             "timestamp": timestamp("help", key),
