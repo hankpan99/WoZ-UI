@@ -22,6 +22,10 @@ const SHOW_PROACTIVE_POINTS = false;
 const MAX_DONE_ABOVE = 2;
 // 「預覽全部步驟」每個步驟停留的毫秒數；2000 ＝ 2 秒。
 const PREVIEW_STEP_MS = 2000;
+// 右側主步驟：單欄放不下時最多改成兩欄。每欄至少保留這個寬度，
+// 避免在較窄的視窗裡硬切兩欄，反而讓文字大量換行。
+const MAX_ACTION_COLUMNS = 2;
+const MIN_ACTION_COLUMN_WIDTH = 420;
 // 詳細步驟先直向排成一欄，放不下才多開一欄，最多這麼多欄。
 // 說明卡（整頁那張）與左下角的「詳細步驟」各有各的上限。
 const MAX_HELP_COLUMNS = 3;
@@ -147,6 +151,35 @@ function updateScrollCue() {
   elements.actionColumn.classList.toggle("scroll-below", hasMoreBelow);
 }
 
+// 主步驟預設維持單欄；只有單欄實際超出可用高度、且右側能容納兩個
+// 最小欄寬時才切成兩欄。兩欄仍太高時沿用原本的垂直捲動作為 fallback。
+function fitActionColumns() {
+  const list = elements.actionList;
+  list.classList.remove("two-columns");
+  list.style.removeProperty("--action-column-rows");
+
+  const styles = getComputedStyle(list);
+  const columnGap = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--action-column-gap"),
+  ) || 0;
+  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0)
+    + (Number.parseFloat(styles.paddingRight) || 0);
+  const availableWidth = list.clientWidth - horizontalPadding;
+  const singleColumnOverflows = list.scrollHeight - list.clientHeight > 1;
+  const hasRoomForTwoColumns = availableWidth
+    >= (MIN_ACTION_COLUMN_WIDTH * MAX_ACTION_COLUMNS) + columnGap;
+
+  if (singleColumnOverflows && hasRoomForTwoColumns && list.children.length > 1) {
+    list.style.setProperty(
+      "--action-column-rows",
+      String(Math.ceil(list.children.length / MAX_ACTION_COLUMNS)),
+    );
+    list.classList.add("two-columns");
+  }
+
+  updateScrollCue();
+}
+
 // 這一頁「還沒完成、編號最小」的步驟＝現在該做的那一步。
 // 全部完成時回傳 actions.length。
 function currentStepIndex() {
@@ -256,9 +289,25 @@ function highlightCurrentStep() {
 }
 
 // 讓現在該做的那一步上方最多只留 MAX_DONE_ABOVE 個已完成的步驟。
+function scrollAnchorIndex(actionIndex) {
+  const count = elements.actionList.children.length;
+  if (!count) return -1;
+  const index = Math.max(0, Math.min(actionIndex, count - 1));
+  if (!elements.actionList.classList.contains("two-columns")) {
+    return Math.max(0, index - MAX_DONE_ABOVE);
+  }
+
+  const rows = Number.parseInt(
+    elements.actionList.style.getPropertyValue("--action-column-rows"),
+    10,
+  ) || count;
+  const columnStart = Math.floor(index / rows) * rows;
+  return Math.max(columnStart, index - MAX_DONE_ABOVE);
+}
+
 function scrollToCurrentStep() {
   const list = elements.actionList;
-  const target = list.children[Math.max(0, currentStepIndex() - MAX_DONE_ABOVE)];
+  const target = list.children[scrollAnchorIndex(currentStepIndex())];
   if (!target) return;
 
   // 用 rect 相減，不必在意 offsetParent 是誰。
@@ -270,7 +319,7 @@ function scrollToCurrentStep() {
 // 預覽時也沿用正式進度的定位方式：目前動作上方最多留兩個看過的動作。
 function scrollToPreviewStep(actionIndex) {
   const list = elements.actionList;
-  const target = list.children[Math.max(0, actionIndex - MAX_DONE_ABOVE)];
+  const target = list.children[scrollAnchorIndex(actionIndex)];
   if (!target) return;
   const delta = target.getBoundingClientRect().top - list.getBoundingClientRect().top;
   if (Math.abs(delta) < 1) return;
@@ -348,7 +397,7 @@ function renderActions(slide) {
 
   elements.actionList.replaceChildren(...buttons);
   elements.actionList.scrollTop = 0;
-  requestAnimationFrame(updateScrollCue);
+  requestAnimationFrame(fitActionColumns);
 }
 
 // 只有勾選狀態變動時走這裡：就地改 class，不動 DOM 結構，
@@ -360,6 +409,7 @@ function syncActionStates() {
     button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
     syncHelpBadges(button, key);
   });
+  fitActionColumns();
   updateRemainingPoints();
   updateCosts();
   highlightCurrentStep();
@@ -654,7 +704,7 @@ elements.mealIcon.addEventListener("error", () => {
 });
 elements.actionList.addEventListener("scroll", updateScrollCue, { passive: true });
 window.addEventListener("resize", () => {
-  updateScrollCue();
+  fitActionColumns();
   // 進出全螢幕會改變可用高度，欄數要重算。
   fitDetailColumns();
   if (overlayKey) fitHelpColumns();

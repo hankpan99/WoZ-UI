@@ -243,6 +243,9 @@ python3 scripts/extract_recipe.py
 - 步驟卡最左側編號：修改 `--step-index-size`。
 - 點數標籤：修改 `--cost-size`。
 - 步驟卡之間的距離：修改 `--action-gap`。
+- 左側圖片＋詳細步驟區寬度：修改 `--preview-panel-width`（預設最多 610px，超寬螢幕新增的空間會留給右側）。
+- 右側雙欄的水平／垂直間距：修改 `--action-column-gap` / `--action-column-row-gap`；單欄卡片最大寬度則修改 `--action-single-max-width`。
+- 右側主步驟只有在單欄實際放不下時才自動變成兩欄；每欄允許的最小寬度在 `client/client.js` 開頭的 `MIN_ACTION_COLUMN_WIDTH`。
 - 詳細步驟標題：修改 `--detail-title-size`。
 - 詳細步驟內文：修改 `--detail-text-size`。
 - 詳細步驟最多分成幾欄：修改 `client/client.js` 開頭的 `MAX_DETAIL_COLUMNS`（預設 `2`）。平常是直的一欄，放不下才會變成兩欄並平均分配。

@@ -80,6 +80,13 @@
   --step-index-size: 1.5rem;
   --cost-size: 1.5rem;
   --action-gap: 16px;
+  /* 主畫面左側維持原本在 1440px 版面下約 610px 的寬度；
+     更寬的螢幕把新增空間留給右側步驟。 */
+  --preview-panel-width: clamp(360px, 44vw, 580px);
+  --action-column-gap: 20px;
+  --action-column-row-gap: 12px;
+  /* 少量步驟維持單欄與自然高度，也避免卡片在超寬螢幕上拉得太長。 */
+  --action-single-max-width: 800px;
   /* 步驟圖片版位：佔左側面板的高度比例，其餘給「詳細步驟」。
      --step-image-fit 用 contain 完整顯示整張圖（不裁切，兩側可能留空），
      改成 cover 則會填滿版位但裁掉超出的部分。 */
@@ -142,7 +149,7 @@ button { color: inherit; }
   display: grid;
   grid-template-rows: var(--top-panel-height) minmax(0, 1fr) 54px;
   gap: 14px;
-  width: min(1440px, calc(100% - 36px));
+  width: calc(100% - 28px);
   height: 100vh;
   margin: 0 auto;
   padding: 14px 0;
@@ -226,7 +233,7 @@ button { color: inherit; }
 .fullscreen-icon { color: var(--blue); font-size: 1.1rem; line-height: 1; }
 .fullscreen-button:hover { color: var(--ink); background: var(--panel-bg); }
 
-.slide-layout { display: grid; grid-template-columns: minmax(360px, .92fr) minmax(0, 1.08fr); gap: clamp(28px, 4vw, 56px); min-height: 0; }
+.slide-layout { display: grid; grid-template-columns: var(--preview-panel-width) minmax(0, 1fr); gap: clamp(28px, 4vw, 56px); min-height: 0; }
 .action-column { position: relative; min-height: 0; overflow: hidden; }
 .action-column::before, .action-column::after {
   position: absolute;
@@ -281,6 +288,16 @@ button { color: inherit; }
 .meal-icon-wrap[hidden] { display: none; }
 .meal-icon { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: right center; }
 .action-list { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--action-gap); height: 100%; min-height: 0; padding: 1px 10px 1px 1px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--card-hover-border) var(--line); }
+/* 單欄放不下而且右側夠寬時，client.js 才會加上 two-columns。
+   固定列數配合 grid-auto-flow: column，閱讀順序會先走完左欄再到右欄。 */
+.action-list.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--action-column-rows), max-content);
+  grid-auto-flow: column;
+  column-gap: var(--action-column-gap);
+  row-gap: var(--action-column-row-gap);
+}
+.action-list:not(.two-columns) .action-card { max-width: var(--action-single-max-width); }
 .action-list::-webkit-scrollbar { width: 9px; }
 .action-list::-webkit-scrollbar-track { border-radius: 99px; background: var(--line); }
 .action-list::-webkit-scrollbar-thumb { border-radius: 99px; background: var(--card-hover-border); }
