@@ -120,8 +120,9 @@ def default_state():
         "currentIndex": 0,
         "done": [],  # ["slideIdx:actionIdx"]，→ client 灰階；不影響點數
         "helped": {},  # key -> 最近一次接受幫助的花費；重複執行的完整紀錄在 ledger
-        # key -> 最近一次的 physical | voice；每次介入都在 ledger 有獨立紀錄。
+        # key -> 最近一次的 physical | voice | voice_reminder；每次介入都在 ledger 有獨立紀錄。
         "helpModes": {},
+        "supportedHelpModes": ["physical", "voice", "voice_reminder"],
         # key -> 這次要代勞的詳細步驟索引。沒有紀錄＝全部勾選（見 selected_details）。
         "helpDetails": {},
         # client 上正在顯示的整頁說明卡，或 None。
@@ -130,6 +131,10 @@ def default_state():
         "proactive": {},
         # client 上正在顯示的主動提議卡，或 None。與 helpOverlay 互斥（同時只有一張卡）。
         "proactiveOverlay": None,
+        # Wizard 控制 Client 上的主動介入提示音；試聽 nonce 不影響點數紀錄。
+        "soundEnabled": True,
+        "soundPreset": "chime",
+        "soundPreviewNonce": 0,
         "ledger": [],  # 兩個點數池的唯一來源，每筆用 pool 分辨是哪一池
         "totalBudget": TOTAL_BUDGET,
         "totalPoints": TOTAL_POINTS,
@@ -181,7 +186,11 @@ def help_note(state, key):
     except (ValueError, IndexError, KeyError, TypeError):
         return None
     mode = state.get("helpModes", {}).get(key, "physical")
-    mode_label = "語音介入" if mode == "voice" else "實體介入"
+    mode_label = {
+        "physical": "實體介入",
+        "voice": "語音介入",
+        "voice_reminder": "語音提醒建議",
+    }.get(mode, "實體介入")
     note = f"第{step}頁 · 步驟{action_index + 1:02d} {mode_label}"
     total = len(action_details(key))
     picked = len(selected_details(state, key))
@@ -355,7 +364,7 @@ def apply_action(state, action):
                 or (kind == "setHelped" and not action.get("value"))):
             return state, False
         mode = action.get("mode")
-        mode = mode if mode in ("physical", "voice") else "physical"
+        mode = mode if mode in ("physical", "voice", "voice_reminder") else "physical"
         cost = _to_number(action.get("cost"), help_cost(state, key))
         selected = selected_details(state, key)
         run = 1 + sum(
@@ -517,6 +526,25 @@ def apply_action(state, action):
         state["previewActive"] = False
         state["previewNonce"] = state.get("previewNonce", 0) + 1
 
+    elif kind == "setSoundEnabled":
+        enabled = action.get("enabled")
+        if not isinstance(enabled, bool) or enabled == state.get("soundEnabled", True):
+            return state, False
+        state["soundEnabled"] = enabled
+
+    elif kind == "setSoundPreset":
+        preset = action.get("preset")
+        if preset not in ("ding", "chime", "beep") or preset == state.get("soundPreset", "chime"):
+            return state, False
+        state["soundPreset"] = preset
+
+    elif kind == "previewSound":
+        preset = action.get("preset", state.get("soundPreset", "chime"))
+        if preset not in ("ding", "chime", "beep"):
+            return state, False
+        state["soundPreset"] = preset
+        state["soundPreviewNonce"] = state.get("soundPreviewNonce", 0) + 1
+
     elif kind == "reset":
         previous_version = state["version"]
         state = default_state()
@@ -614,8 +642,12 @@ def export_payload(state):
             **location,
             "entryId": entry.get("id"),
             "executionNumber": entry.get("run"),
-            "mode": "1. 被動 - 語音" if help_mode == "voice" else "1. 被動 - 實體",
-            "modeCode": 1,
+            "mode": (
+                "2. 語音提醒建議" if help_mode == "voice_reminder"
+                else "1. 被動 - 語音" if help_mode == "voice"
+                else "1. 被動 - 實體"
+            ),
+            "modeCode": 2 if help_mode == "voice_reminder" else 1,
             "helpMode": help_mode,
             "status": "accepted",
             "cost": cost,

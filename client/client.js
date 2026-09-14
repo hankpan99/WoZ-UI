@@ -31,7 +31,7 @@ const MIN_ACTION_COLUMN_WIDTH = 420;
 const MAX_HELP_COLUMNS = 3;
 const MAX_DETAIL_COLUMNS = 2;
 const {
-  actionKey, formatPoints, cleanLabel, pickedDetails, proactiveDetails, proactiveCost,
+  actionKey, formatPoints, cleanLabel, pickedDetails, proactiveDetails, proactiveLevel, proactiveCost,
 } = window.WozFormat;
 
 // Client 右側主步驟使用英文字母編號：A, B, ... Z, AA, AB ...。
@@ -105,8 +105,52 @@ let doneKeys = new Set();
 let helpedKeys = new Set();
 // 主動提議「已接受」的步驟；不接受的不算被代勞，所以不進這一組。
 let proactiveAcceptedKeys = new Set();
+// 拒絕後隱藏「🤖 主動」；取消拒絕或改為接受時會重新顯示。
+let proactiveDeclinedKeys = new Set();
 // 正在顯示說明卡的步驟（"slideIdx:actionIdx"），沒有就是 null。
 let overlayKey = null;
+let lastProactiveOverlayKey = null;
+let hasReceivedOverlayState = false;
+let lastSoundPreviewNonce = null;
+let audioContext = null;
+
+// Client 的全螢幕點擊也是音效啟用手勢；Wizard 可在之後遠端控制開關與音色。
+function unlockAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    audioContext ||= new AudioContextClass();
+    audioContext.resume().catch((error) => console.warn("無法啟用主動介入提示音", error));
+  } catch (error) {
+    console.warn("無法啟用主動介入提示音", error);
+  }
+}
+
+// 無額外音檔的三種短提示；試聽與主動介入共用同一套聲音。
+function playNotificationSound(preset) {
+  if (audioContext?.state !== "running") return;
+  const notes = {
+    ding: [[784, 0, 0.28, "sine", 0.12]],
+    chime: [[660, 0, 0.20, "sine", 0.12], [880, 0.16, 0.20, "sine", 0.12]],
+    beep: [[740, 0, 0.14, "square", 0.055]],
+  }[preset] || [[660, 0, 0.20, "sine", 0.12], [880, 0.16, 0.20, "sine", 0.12]];
+  const start = audioContext.currentTime;
+  notes.forEach(([frequency, offset, duration, type, volume]) => {
+    const at = start + offset;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(volume, at + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(at);
+    oscillator.stop(at + duration + 0.01);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  });
+}
 
 // 兩個點數池各自獨立：可指揮助手＝參與者自己要求的幫助，
 // 主動幫助＝助手主動提議的額度（不接受時會退進可指揮那一池）。
@@ -347,9 +391,10 @@ function syncBadge(button, className, text, on) {
   }
 }
 
-function syncHelpBadges(button, key) {
+function syncHelpBadges(button, key, action) {
   syncBadge(button, "help-badge", "🤖 介入", helpedKeys.has(key));
-  syncBadge(button, "proactive-badge", "🤖 主動", proactiveAcceptedKeys.has(key));
+  syncBadge(button, "proactive-badge", "🤖 主動",
+    proactiveDetails(action).length > 0 && !proactiveDeclinedKeys.has(key));
 }
 
 function renderActions(slide) {
@@ -375,7 +420,7 @@ function renderActions(slide) {
     name.className = "action-name";
     name.textContent = action.name;
 
-    // 右側的標籤都放這裡，順序是「點數 → 已介入」，靠卡片最右邊排。
+    // 右側的標籤都放這裡：點數在上，幫助標記由 syncHelpBadges() 加在下方。
     const tags = document.createElement("span");
     tags.className = "action-tags";
     if (action.cost > 0) {
@@ -386,7 +431,7 @@ function renderActions(slide) {
     }
 
     button.append(number, name, tags);
-    syncHelpBadges(button, key);
+    syncHelpBadges(button, key, action);
     return button;
   });
 
@@ -402,7 +447,7 @@ function syncActionStates() {
     const key = actionKey(currentIndex, index);
     button.classList.toggle("done", doneKeys.has(key));
     button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
-    syncHelpBadges(button, key);
+    syncHelpBadges(button, key, slides[currentIndex].actions[index]);
   });
   fitActionColumns();
   updateRemainingPoints();
@@ -552,6 +597,10 @@ function updateHelpCardWidth(detailCount) {
 function syncHelpOverlay(state) {
   // 主動提議卡優先：server 只會設其中一個，這裡的順序只是防呆。
   const proactiveKey = state.proactiveOverlay || null;
+  const newlyOpenedProactive = hasReceivedOverlayState
+    && proactiveKey && proactiveKey !== lastProactiveOverlayKey;
+  lastProactiveOverlayKey = proactiveKey;
+  hasReceivedOverlayState = true;
   const key = proactiveKey || state.helpOverlay || null;
   const mode = proactiveKey ? "proactive" : "assist";
   // 卡片指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
@@ -565,6 +614,9 @@ function syncHelpOverlay(state) {
 
   const isProactive = mode === "proactive";
   elements.helpOverlay.dataset.mode = mode;
+  elements.helpOverlay.dataset.interventionLevel = isProactive
+    ? (proactiveLevel(action).startsWith("4.") ? "4" : "3")
+    : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
 
   const details = action.details || [];
   updateHelpCardWidth(details.length);
@@ -580,11 +632,14 @@ function syncHelpOverlay(state) {
     `步驟${actionIndex + 1}`,
   ].filter(Boolean).join(" - ");
   const passiveMode = state.helpModes?.[key] || "physical";
+  const passiveTitles = {
+    physical: "實體介入（1. 被動等待）",
+    voice: "語音介入（1. 被動等待）",
+    voice_reminder: "語音介入（2. 語音提醒建議）",
+  };
   const overlayTitle = isProactive
-    ? "實體介入（3. 詢問後）"
-    : (passiveMode === "voice"
-      ? "語音介入（1. 被動等待）"
-      : "實體介入（1. 被動等待）");
+    ? `實體介入（${proactiveLevel(action)}）`
+    : (passiveTitles[passiveMode] || passiveTitles.physical);
   // 介入種類與觸發方式合併成單一標題；動作名稱獨立放在下一行。
   elements.helpOverlayName.textContent = overlayTitle;
   elements.helpOverlayAction.textContent = action.name;
@@ -623,6 +678,9 @@ function syncHelpOverlay(state) {
   elements.helpOverlayCost.textContent = cost == null ? "—" : formatPoints(cost);
 
   fitHelpColumns();
+  if (newlyOpenedProactive && state.soundEnabled !== false) {
+    playNotificationSound(state.soundPreset);
+  }
 }
 
 function applyState(state) {
@@ -632,6 +690,11 @@ function applyState(state) {
   proactiveAcceptedKeys = new Set(
     Object.entries(state.proactive || {})
       .filter(([, entry]) => entry?.status === "accepted")
+      .map(([key]) => key),
+  );
+  proactiveDeclinedKeys = new Set(
+    Object.entries(state.proactive || {})
+      .filter(([, entry]) => entry?.status === "declined")
       .map(([key]) => key),
   );
   clientViewKey = state.clientViewKey || null;
@@ -659,6 +722,11 @@ function applyState(state) {
   }
 
   syncHelpOverlay(state);
+  const soundPreviewNonce = state.soundPreviewNonce ?? 0;
+  if (lastSoundPreviewNonce !== null && soundPreviewNonce !== lastSoundPreviewNonce) {
+    playNotificationSound(state.soundPreset);
+  }
+  lastSoundPreviewNonce = soundPreviewNonce;
   if (previewStopped) stopPreview();
   if (previewRequested) previewAllSteps(previewNonce);
   if (!previewRequested) applyClientView();
@@ -700,6 +768,7 @@ elements.scrollCue.addEventListener("click", () => {
 });
 
 elements.fullscreenButton.addEventListener("click", async () => {
+  unlockAudio();
   try {
     if (!document.fullscreenElement) {
       await document.documentElement.requestFullscreen();

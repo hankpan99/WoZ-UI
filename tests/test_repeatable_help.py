@@ -103,6 +103,32 @@ class RepeatableHelpTests(unittest.TestCase):
         self.assertFalse(changed)
         self.assertEqual(state["ledger"], [])
 
+    def test_voice_reminder_is_a_distinct_repeatable_mode(self):
+        state = recipe_state.default_state()
+        self.assertIn("voice_reminder", state["supportedHelpModes"])
+        key = "0:0"
+        self.select_only(state, key, [0, 1])
+
+        state, changed = recipe_state.apply_action(state, {
+            "type": "repeatHelped", "key": key, "mode": "voice_reminder", "cost": 2,
+        })
+        self.assertTrue(changed)
+        self.assertEqual(state["helpOverlay"], key)
+        self.assertEqual(state["helpModes"][key], "voice_reminder")
+        self.assertEqual(state["ledger"][0]["helpMode"], "voice_reminder")
+        self.assertIn("語音提醒建議", state["ledger"][0]["note"])
+        self.assertEqual(state["ledger"][0]["selectedDetails"], [0, 1])
+        self.assertEqual(state["remaining"], state["totalPoints"] - 2)
+        self.assertIsNone(state["proactiveOverlay"])
+
+        recipe_state.apply_action(state, {
+            "type": "repeatHelped", "key": key, "mode": "voice", "cost": 1,
+        })
+        records = recipe_state.export_payload(state)["records"]
+        self.assertEqual([record["modeCode"] for record in records], [1, 2])
+        self.assertEqual([record["helpMode"] for record in records], ["voice", "voice_reminder"])
+        self.assertEqual([record["executionNumber"] for record in records], [2, 1])
+
 
 if __name__ == "__main__":
     unittest.main()

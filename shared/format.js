@@ -50,6 +50,10 @@
   // 這個步驟裡屬於主動提議範圍的詳細動作索引。
   const proactiveDetails = (action) => action?.proactive || [];
 
+  // 舊版食譜沒有主動程度欄位時，維持原本的詢問後介入。
+  const proactiveLevel = (action) =>
+    action?.proactiveLevel === "4. 直接" ? "4. 直接" : "3. 詢問後";
+
   // 整個步驟都標記＝原價；只標幾條＝標到的條數。沒有標記就是 0。
   const proactiveCost = (action) => {
     const marks = proactiveDetails(action).length;
@@ -62,6 +66,6 @@
 
   window.WozFormat = {
     actionKey, formatPoints, formatDelta, cleanLabel, formatTime, slideCost,
-    pickedDetails, helpCost, proactiveDetails, proactiveCost,
+    pickedDetails, helpCost, proactiveDetails, proactiveLevel, proactiveCost,
   };
 })();

@@ -3,7 +3,7 @@
 const slides = window.RECIPE_SLIDES || [];
 const {
   actionKey, formatPoints, formatDelta, cleanLabel, pickedDetails, helpCost,
-  proactiveDetails, proactiveCost,
+  proactiveDetails, proactiveLevel, proactiveCost,
 } = window.WozFormat;
 const { dispatch } = window.WozStore;
 
@@ -27,6 +27,9 @@ const elements = {
   clearAll: document.querySelector("#clear-all"),
   remainingPoints: document.querySelector("#remaining-points"),
   remainingProactive: document.querySelector("#remaining-proactive"),
+  soundToggle: document.querySelector("#sound-toggle"),
+  soundPreset: document.querySelector("#sound-preset"),
+  soundPreview: document.querySelector("#sound-preview"),
   adjustForm: document.querySelector("#adjust-form"),
   adjustInput: document.querySelector("#adjust-input"),
   adjustAdd: document.querySelector("#adjust-add"),
@@ -120,6 +123,9 @@ function buildStepList() {
       const row = document.createElement("div");
       row.className = "step-row";
       row.dataset.key = key;
+      if (proactiveDetails(action).length > 0) {
+        row.dataset.proactiveLevel = proactiveLevel(action).startsWith("4.") ? "4" : "3";
+      }
 
       const doneLabel = document.createElement("label");
       doneLabel.className = "check done-check";
@@ -184,6 +190,7 @@ function buildStepList() {
       [
         ["physical", "1. 被動等待 - 實體"],
         ["voice", "1. 被動等待 - 語音"],
+        ["voice_reminder", "2. 語音提醒建議"],
       ].forEach(([mode, text]) => {
         const button = document.createElement("button");
         button.type = "button";
@@ -191,6 +198,7 @@ function buildStepList() {
         button.dataset.role = "help-mode";
         button.dataset.mode = mode;
         button.textContent = text;
+        if (mode === "voice_reminder") button.disabled = true;
         button.addEventListener("click", () => {
           const cost = Number(costInput.value);
           manualCostKeys.delete(key);
@@ -257,13 +265,20 @@ function buildProactiveRow(key, action, slide, index) {
   const overlayBox = document.createElement("input");
   overlayBox.type = "checkbox";
   overlayBox.dataset.role = "proactive-overlay";
-  overlayBox.addEventListener("change", () => {
-    dispatch({ type: "setProactiveOverlay", key: overlayBox.checked ? key : null });
+  overlayBox.addEventListener("change", async () => {
+    const requestedKey = overlayBox.checked ? key : null;
+    const result = await dispatch({ type: "setProactiveOverlay", key: requestedKey });
+    // Excel 轉換後若沒重啟 server，Wizard 可能看到新按鈕，server 卻仍用舊食譜。
+    if (requestedKey && result?.changed === false
+      && window.WozStore.state?.proactiveOverlay !== requestedKey) {
+      overlayBox.checked = false;
+      window.alert("server 仍在使用舊食譜資料。請重新啟動 server，再重新整理 Wizard 和 Client。");
+    }
   });
   overlayLabel.append(
     overlayBox,
     Object.assign(document.createElement("span"), {
-      textContent: `3. 詢問後實體介入 ${marks.length}/${(action.details || []).length}`,
+      textContent: `${proactiveLevel(action)}實體介入 ${marks.length}/${(action.details || []).length}`,
       title: `第${slide.step}頁 · 步驟${stepLabel(index)} 在 Excel「介入」欄標了 ${marks.length} 條`,
     }),
   );
@@ -428,6 +443,10 @@ function syncStepList(state) {
       // 每顆都是「執行一次」，不再表示開啟／關閉狀態。
       button.classList.remove("is-on");
       button.removeAttribute("aria-pressed");
+      if (button.dataset.mode === "voice_reminder") {
+        button.disabled = !state.supportedHelpModes?.includes("voice_reminder");
+        button.title = button.disabled ? "請重啟 server 以啟用模式 2" : "";
+      }
     });
 
     // 剛勾成「接受幫助」的步驟自動展開，讓 wizard 可以馬上調要代勞哪幾條。
@@ -464,7 +483,7 @@ function syncStepList(state) {
 
     row.classList.toggle("is-done", isDone);
     row.classList.toggle("is-helped", isHelped);
-    row.classList.toggle("is-help-voice", helpMode === "voice");
+    row.classList.toggle("is-help-reminder", helpMode === "voice_reminder");
     row.classList.toggle("is-showing", isShowing);
     const isClientView = state.clientViewKey === key;
     row.classList.toggle("is-client-view", isClientView);
@@ -514,12 +533,16 @@ function syncOverlayStatus(state) {
   const proactiveKey = state.proactiveOverlay || null;
   const key = proactiveKey || state.helpOverlay || null;
   elements.overlayStatus.hidden = !key;
+  const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
+  const action = slides[slideIndex]?.actions[actionIndex];
+  elements.overlayStatus.dataset.interventionLevel = proactiveKey
+    ? (proactiveLevel(action).startsWith("4.") ? "4" : "3")
+    : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
   // 關閉鈕要送對應的 action，記在 dataset 上讓 click handler 讀。
   elements.overlayStatus.dataset.mode = proactiveKey ? "proactive" : "assist";
   elements.overlayClose.textContent = proactiveKey ? "關閉提議卡" : "關閉說明卡";
   if (!key) return;
 
-  const [slideIndex, actionIndex] = key.split(":").map(Number);
   const slide = slides[slideIndex];
   const name = slide?.actions[actionIndex]?.name || "";
   const kind = proactiveKey ? "主動提議卡" : "說明卡";
@@ -588,8 +611,10 @@ function buildLedgerRecords(state) {
       || pickedDetails(state, key, (action.details || []).length);
     records.push({
       key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
-      mode: helpMode === "voice" ? "1. 被動 - 語音" : "1. 被動 - 實體",
-      modeCode: 1, status: entry.run ? `第 ${entry.run} 次執行` : "已介入",
+      mode: helpMode === "voice_reminder" ? "2. 語音提醒建議"
+        : helpMode === "voice" ? "1. 被動 - 語音" : "1. 被動 - 實體",
+      modeCode: helpMode === "voice_reminder" ? 2 : 1,
+      status: entry.run ? `第 ${entry.run} 次執行` : "已介入",
       action: action.name, ts: entry.ts,
       changes: [{ pool: "assist", delta: entry.delta }],
       selection: selectionSummary(action, selected),
@@ -688,6 +713,11 @@ function syncLedger(state) {
 function applyState(state) {
   currentIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
 
+  const soundEnabled = state.soundEnabled !== false;
+  elements.soundToggle.textContent = soundEnabled ? "🔔 主動提示音：開" : "🔕 主動提示音：關";
+  elements.soundToggle.setAttribute("aria-pressed", String(soundEnabled));
+  elements.soundPreset.value = state.soundPreset || "chime";
+
   const previewing = Boolean(state.previewActive);
   elements.previewAll.textContent = previewing ? "■ 停止預覽" : "▶ 預覽全部步驟";
   elements.previewAll.classList.toggle("is-on", previewing);
@@ -741,6 +771,15 @@ function setWholePage(value) {
 }
 
 elements.previewAll.addEventListener("click", () => dispatch({ type: "previewAll" }));
+elements.soundToggle.addEventListener("click", () => {
+  dispatch({ type: "setSoundEnabled", enabled: window.WozStore.state?.soundEnabled === false });
+});
+elements.soundPreset.addEventListener("change", () => {
+  dispatch({ type: "setSoundPreset", preset: elements.soundPreset.value });
+});
+elements.soundPreview.addEventListener("click", () => {
+  dispatch({ type: "previewSound", preset: elements.soundPreset.value });
+});
 elements.clientViewClose.addEventListener("click", () => {
   dispatch({ type: "setClientView", key: null });
 });

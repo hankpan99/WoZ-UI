@@ -38,6 +38,13 @@
   --proactive-bg: #eaf2f9;
   --proactive-text: #1f4f76;
   --proactive-badge-bg: #d6e6f3;
+  /* 等級 2：語音提醒建議；等級 4：直接實體介入。 */
+  --reminder-border: #3f8a5d;
+  --reminder-bg: #e8f5ec;
+  --reminder-text: #24643b;
+  --direct-border: #8a5bb5;
+  --direct-bg: #f2ebf8;
+  --direct-text: #5e3782;
   --proactive-accepted-text: #2f6b3d;
   --proactive-accepted-bg: #dff0e2;
   --proactive-declined-text: #7a6a4a;
@@ -349,13 +356,13 @@ button { color: inherit; }
 
 .action-number { color: var(--action-number); font-size: var(--step-index-size); font-weight: 700; letter-spacing: .08em; }
 .action-name { min-width: 0; font-size: var(--step-name-size); font-weight: 650; line-height: 1.3; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere; }
-/* 卡片右側的標籤群：點數在上、「已介入」在下一行，整組靠最右邊。
+/* 卡片右側的標籤群：點數在上、幫助標記在下，整組靠最右邊。
    刻意做成 .action-card 的直接子元素，這樣同時已完成時會被灰階規則一起處理。 */
 .action-tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; justify-content: center; }
 .cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 「接受幫助」的記號，卡片最右邊那顆。 */
 .help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
-/* 主動提議被接受的步驟。兩種幫助各自獨立，所以可能跟 .help-badge 並排。 */
+/* 有主動提議資格且未被拒絕的步驟；可能與 .help-badge 同時顯示。 */
 .proactive-badge { padding: 7px 11px; border-radius: 99px; color: var(--proactive-text); background: var(--proactive-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
 .action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
@@ -469,6 +476,12 @@ button { color: inherit; }
 .help-overlay[data-mode="proactive"] .help-card { border-color: var(--proactive-border); }
 .help-overlay[data-mode="proactive"] .help-card-head { background: var(--proactive-bg); }
 .help-overlay[data-mode="proactive"] .help-card-title { color: var(--proactive-text); }
+.help-overlay[data-intervention-level="2"] .help-card { border-color: var(--reminder-border); }
+.help-overlay[data-intervention-level="2"] .help-card-head { background: var(--reminder-bg); }
+.help-overlay[data-intervention-level="2"] .help-card-title { color: var(--reminder-text); }
+.help-overlay[data-intervention-level="4"] .help-card { border-color: var(--direct-border); }
+.help-overlay[data-intervention-level="4"] .help-card-head { background: var(--direct-bg); }
+.help-overlay[data-intervention-level="4"] .help-card-title { color: var(--direct-text); }
 
 .help-card-body {
   display: grid;

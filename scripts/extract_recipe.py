@@ -27,6 +27,8 @@ PLACEHOLDER_LABELS = {"", "-", "—"}
 # 標記「這條詳細動作屬於助手主動提議的範圍」的欄位與值。
 PROACTIVE_HEADER = "介入"
 PROACTIVE_MARK = "O"
+PROACTIVE_LEVEL_HEADER = "主動程度"
+PROACTIVE_LEVELS = {"3. 詢問後", "4. 直接"}
 
 
 def worksheet_path(archive):
@@ -96,6 +98,8 @@ def extract():
         # 「介入」欄不是必要欄位：沒有這一欄就當成整份食譜都沒有主動幫助，
         # 舊的 workbook 仍然開得起來。
         proactive_column = columns.get(PROACTIVE_HEADER)
+        # 舊版 Excel 沒有「主動程度」時，前端會沿用原本的「3. 詢問後」。
+        proactive_level_column = columns.get(PROACTIVE_LEVEL_HEADER)
 
         for row in rows:
             meal = row.get(columns["餐點"], "")
@@ -144,6 +148,14 @@ def extract():
                     (row.get(proactive_column) or "").strip().upper() == PROACTIVE_MARK
                 )
                 if marked:
+                    level = (row.get(proactive_level_column) or "").strip() if proactive_level_column else ""
+                    if level:
+                        if level not in PROACTIVE_LEVELS:
+                            raise ValueError(f"不支援的主動程度：{level!r}（步驟：{current_action['name']}）")
+                        previous = current_action.get("proactiveLevel")
+                        if previous and previous != level:
+                            raise ValueError(f"同一步驟有不同的主動程度：{current_action['name']}")
+                        current_action["proactiveLevel"] = level
                     current_action["proactive"].append(len(current_action["details"]))
                 current_action["details"].append(
                     " ".join(detail.split())
