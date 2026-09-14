@@ -193,11 +193,11 @@ function buildStepList() {
         button.textContent = text;
         button.addEventListener("click", () => {
           const cost = Number(costInput.value);
+          manualCostKeys.delete(key);
           dispatch({
-            type: "setHelped",
+            type: "repeatHelped",
             key,
             mode,
-            value: !button.classList.contains("is-on"),
             cost: Number.isFinite(cost) ? cost : action.cost,
             note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
           });
@@ -224,6 +224,10 @@ function buildStepList() {
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
         overlayButton,
       );
+      helpRow.append(Object.assign(document.createElement("span"), {
+        className: "repeatable-hint",
+        textContent: "每按一次介入模式，就新增一次執行紀錄",
+      }));
 
       body.append(title);
       const proactiveRow = buildProactiveRow(key, action, slide, index);
@@ -363,6 +367,11 @@ function buildDetailBlock(key, details, marks = []) {
     box.dataset.detailIndex = String(detailIndex);
     box.addEventListener("change", () => setStepDetails(key, detailIndex, box.checked));
     label.append(
+      Object.assign(document.createElement("span"), {
+        className: "detail-executed",
+        textContent: "已執行",
+        hidden: true,
+      }),
       box,
       // 編號跟參與者說明卡上的一致，兩邊對得起來。
       Object.assign(document.createElement("span"), {
@@ -394,6 +403,15 @@ function syncStepList(state) {
   const proactive = state.proactive || {};
   const overlayKey = state.helpOverlay || null;
   const proactiveOverlayKey = state.proactiveOverlay || null;
+  const executedByKey = new Map();
+  (state.ledger || []).forEach((entry) => {
+    if (entry.kind !== "help" || !entry.key) return;
+    const [slideIndex, actionIndex] = entry.key.split(":").map(Number);
+    const total = slides[slideIndex]?.actions[actionIndex]?.details?.length || 0;
+    const selected = entry.selectedDetails || pickedDetails(state, entry.key, total);
+    if (!executedByKey.has(entry.key)) executedByKey.set(entry.key, new Set());
+    selected.forEach((index) => executedByKey.get(entry.key).add(index));
+  });
 
   [...elements.stepList.children].forEach((row, index) => {
     const key = row.dataset.key;
@@ -407,16 +425,19 @@ function syncStepList(state) {
     row.querySelector('[data-role="done"]').checked = isDone;
     const helpMode = isHelped ? (helpModes[key] || "physical") : null;
     row.querySelectorAll('[data-role="help-mode"]').forEach((button) => {
-      const selected = button.dataset.mode === helpMode;
-      button.classList.toggle("is-on", selected);
-      button.setAttribute("aria-pressed", String(selected));
+      // 每顆都是「執行一次」，不再表示開啟／關閉狀態。
+      button.classList.remove("is-on");
+      button.removeAttribute("aria-pressed");
     });
 
     // 剛勾成「接受幫助」的步驟自動展開，讓 wizard 可以馬上調要代勞哪幾條。
     if (isHelped && !lastHelpedKeys.has(key)) expandedKeys.add(key);
 
     row.querySelectorAll("[data-detail-index]").forEach((box) => {
-      box.checked = picked.has(Number(box.dataset.detailIndex));
+      const detailIndex = Number(box.dataset.detailIndex);
+      box.checked = picked.has(detailIndex);
+      const executed = executedByKey.get(key)?.has(detailIndex) || false;
+      box.closest(".detail-check").querySelector(".detail-executed").hidden = !executed;
     });
     const checks = row.querySelector('[data-role="detail-checks"]');
     if (checks) {
@@ -430,12 +451,11 @@ function syncStepList(state) {
     const costInput = row.querySelector('[data-role="cost"]');
     // 正在輸入的欄位不動，避免打到一半被覆蓋。
     if (document.activeElement !== costInput) {
-      // 已勾選的一定顯示帳本裡的金額；還沒勾的跟著詳細步驟自動算，
-      // 但 wizard 手動打過的就以他打的為準。
-      if (isHelped) costInput.value = String(helped[key]);
-      else if (!manualCostKeys.has(key)) costInput.value = String(helpCost(action, picked.size));
+      // 每個步驟都顯示下一次的預估花費。
+      // wizard 手動打過的數字仍優先，直到再調整詳細動作或按下一次介入。
+      if (!manualCostKeys.has(key)) costInput.value = String(helpCost(action, picked.size));
     }
-    costInput.disabled = isHelped;
+    costInput.disabled = false;
 
     const overlayButton = row.querySelector('[data-role="overlay"]');
     overlayButton.disabled = !isHelped;
@@ -557,19 +577,22 @@ function buildLedgerRecords(state) {
     ledger.find((entry) => entry.kind === kind && entry.key === key)?.ts ?? null;
   const records = [];
 
-  Object.entries(state.helped || {}).forEach(([key, cost]) => {
+  ledger.filter((entry) => entry.kind === "help").forEach((entry) => {
+    const key = entry.key;
     const [slideIndex, actionIndex] = key.split(":").map(Number);
     const slide = slides[slideIndex];
     const action = slide?.actions[actionIndex];
     if (!action) return;
-    const helpMode = state.helpModes?.[key] || "physical";
+    const helpMode = entry.helpMode || state.helpModes?.[key] || "physical";
+    const selected = entry.selectedDetails
+      || pickedDetails(state, key, (action.details || []).length);
     records.push({
       key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
       mode: helpMode === "voice" ? "1. 被動 - 語音" : "1. 被動 - 實體",
-      modeCode: 1, status: "已介入", action: action.name,
-      ts: timestampFor("help", key),
-      changes: [{ pool: "assist", delta: -cost }],
-      selection: selectionSummary(action, pickedDetails(state, key, (action.details || []).length)),
+      modeCode: 1, status: entry.run ? `第 ${entry.run} 次執行` : "已介入",
+      action: action.name, ts: entry.ts,
+      changes: [{ pool: "assist", delta: entry.delta }],
+      selection: selectionSummary(action, selected),
     });
   });
 

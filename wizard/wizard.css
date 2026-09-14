@@ -277,7 +277,8 @@ h2, h3 { margin: 0; }
 .client-view-button:hover,
 .client-view-button.is-on { color: var(--white); background: var(--proactive-border); }
 
-.help-row { display: flex; gap: 8px; align-items: center; min-height: 34px; }
+.help-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 34px; }
+.repeatable-hint { flex-basis: 100%; color: var(--muted); font-size: .76rem; }
 .intervention-check {
   position: relative;
   flex: 0 0 var(--intervention-controls-width);
@@ -458,6 +459,8 @@ h2, h3 { margin: 0; }
   overflow-wrap: anywhere;
 }
 .detail-check input { width: 15px; height: 15px; margin: 0; flex-shrink: 0; accent-color: var(--helped-border); cursor: pointer; }
+.detail-executed { flex-shrink: 0; padding: 1px 5px; color: var(--helped-badge-text); border-radius: 4px; background: var(--helped-bg); font-size: .7rem; font-weight: 750; white-space: nowrap; }
+.detail-executed[hidden] { display: none; }
 .detail-check-index { flex-shrink: 0; color: var(--helped-badge-text); font-size: .78rem; font-weight: 800; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
 .detail-check-text { min-width: 0; }
 /* 沒有勾＝這次不代勞，參與者的說明卡上不會出現這一條。 */

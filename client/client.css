@@ -64,7 +64,6 @@
   --stat-value-size: 3rem;
   --stat-unit-size: 1.25rem;
   --meal-label-size: 2.3rem;
-  --stage-name-size: 2.3rem;
   /* 花費卡。預設跟其他卡一樣大；如果打開 client.js 的 SHOW_STEP_COST
      變成兩行後覺得太擠，就把這兩個調小（會只影響這張卡）。 */
   --cost-row-gap: 10px;
@@ -75,7 +74,7 @@
   --points-row-gap: 10px;
   --points-label-size: 2.3rem;
   --points-value-size: 3rem;
-  --progress-count-size: 1.15rem;
+  --progress-count-size: 1.8rem;
   --step-name-size: 2rem;
   --step-index-size: 1.5rem;
   --cost-size: 1.5rem;
@@ -147,7 +146,7 @@ button { color: inherit; }
 
 .app-shell {
   display: grid;
-  grid-template-rows: var(--top-panel-height) minmax(0, 1fr) 54px;
+  grid-template-rows: var(--top-panel-height) minmax(0, 1fr);
   gap: 14px;
   width: calc(100% - 28px);
   height: 100vh;
@@ -189,31 +188,22 @@ button { color: inherit; }
 .stat-card.accent .stat-value { font-size: var(--points-value-size); }
 .stat-copy { min-width: 0; }
 .stat-label { display: block; max-width: 12em; color: var(--muted); font-size: var(--stat-label-size); font-weight: 650; line-height: 1.25; letter-spacing: .02em; overflow-wrap: anywhere; }
-/* 餐點與階段各佔一行，卡片才不用做那麼寬，也把寬度讓給右邊的圖示。
+/* 頁數在上、餐點與階段合併在下，右側圖示沿用原本的尺寸設定。
    align-self: center 是因為整張卡用了 stretch（給圖示吃滿高度用的），
    文字要單獨拉回垂直置中。 */
-.stage-title { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; align-self: center; min-width: 0; }
-.stage-title .stat-label { max-width: none; font-size: var(--stage-name-size); white-space: nowrap; }
-.stage-title .meal-label { white-space: nowrap; }
+.stage-title { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; align-self: center; min-width: 0; }
+.step-progress { color: var(--muted); font-size: var(--progress-count-size); font-weight: 750; font-variant-numeric: tabular-nums; }
+.stage-title .meal-label { max-width: none; }
 .stage-title > [hidden] { display: none; }
-/* 文字佔自己需要的寬度，剩下的全給圖示；align-items: stretch 讓圖示吃滿卡片高度。 */
-.step-card { grid-template-columns: auto minmax(0, 1fr); align-items: stretch; }
+/* 文字可換行，避免合併標題把右側圖示擠小。 */
+.step-card { grid-template-columns: minmax(0, 1fr) minmax(0, min(var(--meal-icon-width), 45%)); align-items: stretch; }
+.step-card:has(.meal-icon-wrap[hidden]) { grid-template-columns: minmax(0, 1fr); }
 .meal-label { color: var(--blue); font-size: var(--meal-label-size); font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
 .stat-value { display: block; margin: 0; font-size: var(--stat-value-size); line-height: 1; text-align: right; white-space: nowrap; }
 .stat-value small { color: var(--muted); font-size: var(--stat-unit-size); font-weight: 500; }
 /* 上面兩條的 display: block 會蓋掉瀏覽器內建的 [hidden]，所以要自己寫一次。
    （client.js 的 SHOW_STEP_COST 用這個把「此步驟剩餘…」整行收掉。） */
 .stat-label[hidden], .stat-value[hidden] { display: none; }
-
-.progress-track {
-  width: 100%;
-  height: 5px;
-  overflow: hidden;
-  border-radius: 100px;
-  background: var(--line);
-}
-
-.progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--blue-accent); transition: width .35s ease; }
 
 .recipe-stage {
   display: grid;
@@ -392,17 +382,6 @@ button { color: inherit; }
 .detail-panel li { position: relative; min-width: 0; margin-bottom: var(--detail-row-gap); padding: 0 4px 0 40px; overflow-wrap: anywhere; break-inside: avoid; counter-increment: detail-step; }
 .detail-panel li:last-child { margin-bottom: 0; }
 .detail-panel li::before { position: absolute; top: .05em; left: 0; content: counter(detail-step, decimal-leading-zero); color: var(--blue-accent); font-size: .82em; font-weight: 800; letter-spacing: .08em; }
-
-.slide-nav { display: grid; grid-template-columns: 1fr minmax(240px, 420px) 1fr; gap: 18px; align-items: center; min-height: 0; }
-.nav-progress { display: flex; gap: 16px; align-items: center; width: 100%; padding: 0 24px; }
-.nav-progress .progress-track { flex: 1; }
-.progress-count { color: var(--ink); font-size: var(--progress-count-size); font-weight: 750; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.progress-count small { color: var(--muted); font-size: .8em; font-weight: 600; }
-.nav-button { display: inline-flex; gap: 12px; align-items: center; justify-content: center; min-width: 140px; min-height: 50px; padding: 0 20px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: opacity .2s ease, transform .2s ease; }
-.nav-button:hover:not(:disabled) { transform: translateY(-2px); }
-.nav-button.secondary { justify-self: start; background: var(--white); }
-.nav-button.primary { justify-self: end; color: var(--white); border-color: var(--ink); background: var(--ink); }
-.nav-button:disabled { opacity: .3; cursor: not-allowed; }
 
 /* 預覽提示刻意做成不遮住內容的小型 pop-out，左右兩區仍可完整看見。 */
 .preview-status {
@@ -590,8 +569,9 @@ button { color: inherit; }
 .offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); font-size: .95em; }
 
 @media (max-height: 760px) {
-  .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr) 48px; gap: 10px; padding: 10px 0; }
+  .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr); gap: 10px; padding: 10px 0; }
   .stat-card { padding: 15px 22px; }
+  .stage-title .meal-label { font-size: 1.5rem; }
   .stat-value { font-size: 1.8rem; }
   .stat-card.accent .stat-label { font-size: 1.15rem; }
   .stat-card.accent .stat-value { font-size: 1.8rem; }

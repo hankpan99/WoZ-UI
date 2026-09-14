@@ -15,7 +15,7 @@ RECIPE_DATA = PROJECT_ROOT / "data" / "recipe-data.js"
 # 參與者的總預算（原本 app.js 的 STARTING_POINTS）。
 # 兩個池加起來就是這個數字：主動幫助池的總額由 Excel 的「介入」欄決定，
 # 剩下的才是可指揮助手池（見下面的 TOTAL_POINTS）。
-TOTAL_BUDGET = 278
+TOTAL_BUDGET = 200
 # 讀不到 data/recipe-data.js 時的頁數 fallback。
 FALLBACK_SLIDE_COUNT = 20
 
@@ -119,8 +119,8 @@ def default_state():
         "version": 0,
         "currentIndex": 0,
         "done": [],  # ["slideIdx:actionIdx"]，→ client 灰階；不影響點數
-        "helped": {},  # key -> 該次接受幫助的花費
-        # key -> physical | voice；兩種被動介入互斥，沿用同一筆可指揮點數。
+        "helped": {},  # key -> 最近一次接受幫助的花費；重複執行的完整紀錄在 ledger
+        # key -> 最近一次的 physical | voice；每次介入都在 ledger 有獨立紀錄。
         "helpModes": {},
         # key -> 這次要代勞的詳細步驟索引。沒有紀錄＝全部勾選（見 selected_details）。
         "helpDetails": {},
@@ -252,22 +252,20 @@ def _entry(kind, delta, note, key=None, pool=ASSIST_POOL):
     return entry
 
 
-def _resync_help(state, key):
-    """詳細步驟改動後，把已經記在帳上的那一筆就地改掉。
-
-    沿用「帳本是目前生效的帳目清單」的原則：不新增反向帳、也不換位置，
-    所以剩餘點數與畫面上的勾選永遠一致，回溯的結果也一樣可預期。
-    """
-    if key not in state["helped"]:
-        return
-    cost = help_cost(state, key)
-    note = help_note(state, key)
-    state["helped"][key] = cost
-    for item in state["ledger"]:
-        if item["kind"] == "help" and item.get("key") == key:
-            item["delta"] = -cost
-            if note:
-                item["note"] = note
+def _restore_help_from_ledger(state, key):
+    """回溯後，讓 Client 的已介入標記指向這個步驟最近一次仍生效的執行。"""
+    _close_overlay_for(state, {key})
+    latest = next(
+        (item for item in reversed(state["ledger"])
+         if item["kind"] == "help" and item.get("key") == key),
+        None,
+    )
+    if latest is None:
+        state["helped"].pop(key, None)
+        state.setdefault("helpModes", {}).pop(key, None)
+    else:
+        state["helped"][key] = _to_number(-latest["delta"])
+        state.setdefault("helpModes", {})[key] = latest.get("helpMode", "physical")
 
 
 def _close_overlay_for(state, keys):
@@ -349,46 +347,29 @@ def apply_action(state, action):
         if action.get("value"):
             _close_overlay_for(state, set(keys))
 
-    elif kind == "setHelped":
+    elif kind in ("repeatHelped", "setHelped"):
         key = action.get("key")
-        if not isinstance(key, str):
+        # 舊版 Wizard 的 setHelped(value=True) 也能作為「新增一次」；
+        # value=False 不再刪除歷史紀錄，撤銷請使用 undoLedger。
+        if (not isinstance(key, str) or _action_at(key) is None
+                or (kind == "setHelped" and not action.get("value"))):
             return state, False
-        if action.get("value"):
-            mode = action.get("mode")
-            mode = mode if mode in ("physical", "voice") else "physical"
-            help_modes = state.setdefault("helpModes", {})
-            # 預設花費由勾選中的詳細步驟算出；wizard 手動打過的數字仍然優先。
-            cost = _to_number(action.get("cost"), help_cost(state, key))
-            if key in state["helped"]:
-                # 實體／語音互相切換只更新模式，不重複扣點。
-                if help_modes.get(key, "physical") == mode:
-                    return state, False
-                help_modes[key] = mode
-                note = help_note(state, key)
-                for item in state["ledger"]:
-                    if item["kind"] == "help" and item.get("key") == key and note:
-                        item["note"] = note
-            else:
-                help_modes[key] = mode
-                state["helped"][key] = cost
-                note = help_note(state, key) or action.get("note") or f"步驟 {key} 接受幫助"
-                state["ledger"].append(_entry("help", -cost, note, key))
-            # 勾起來的當下就把說明卡推到參與者畫面上；
-            # 畫面上只放得下一張卡，所以主動提議卡要讓位。
-            state["helpOverlay"] = key
-            state["proactiveOverlay"] = None
-        else:
-            if key not in state["helped"]:
-                return state, False
-            del state["helped"][key]
-            state.setdefault("helpModes", {}).pop(key, None)
-            # 取消勾選＝直接把那筆帳目拿掉，不記反向帳，
-            # 這樣帳本與勾選狀態永遠一致、回溯也永遠可預期。
-            state["ledger"] = [
-                item for item in state["ledger"]
-                if not (item["kind"] == "help" and item.get("key") == key)
-            ]
-            _close_overlay_for(state, {key})
+        mode = action.get("mode")
+        mode = mode if mode in ("physical", "voice") else "physical"
+        cost = _to_number(action.get("cost"), help_cost(state, key))
+        selected = selected_details(state, key)
+        run = 1 + sum(
+            item["kind"] == "help" and item.get("key") == key
+            for item in state["ledger"]
+        )
+        state.setdefault("helpModes", {})[key] = mode
+        note = help_note(state, key) or f"步驟 {key} 接受幫助"
+        entry = _entry("help", -cost, note, key)
+        entry.update({"helpMode": mode, "selectedDetails": selected, "run": run})
+        state["ledger"].append(entry)
+        state["helped"][key] = cost
+        state["helpOverlay"] = key
+        state["proactiveOverlay"] = None
 
     elif kind == "setHelpDetail":
         # 這次要代勞哪些詳細步驟。index 為 None＝整個步驟全選 / 全不選。
@@ -415,8 +396,10 @@ def apply_action(state, action):
         if updated == picked:
             return state, False
         state["helpDetails"][key] = sorted(updated)
-        # 已經扣過點的話，那筆帳目跟著改，不會多記一筆。
-        _resync_help(state, key)
+        # 這是下一次要執行的選取；舊帳目的快照與點數完全不動。
+        # 正在準備下一次的選取不能改變上一張已執行的說明卡內容。
+        if state["helpOverlay"] == key:
+            state["helpOverlay"] = None
 
     elif kind == "setHelpOverlay":
         # 只有已經扣過點的步驟才叫得出說明卡；None＝關掉。
@@ -492,9 +475,7 @@ def apply_action(state, action):
             return state, False
         removed = state["ledger"].pop()
         if removed["kind"] == "help":
-            state["helped"].pop(removed.get("key"), None)
-            state.setdefault("helpModes", {}).pop(removed.get("key"), None)
-            _close_overlay_for(state, {removed.get("key")})
+            _restore_help_from_ledger(state, removed.get("key"))
         elif removed["kind"] == "proactive":
             # 「不接受」記了兩筆（主動池扣、可指揮池退），
             # 只回溯一筆會讓兩個池對不起來，所以整組一起拿掉。
@@ -615,21 +596,32 @@ def export_payload(state):
         return item.get("ts") if item else None
 
     records = []
-    for key, cost in (state.get("helped") or {}).items():
+    for entry in ledger:
+        if entry.get("kind") != "help":
+            continue
+        key = entry.get("key")
+        if not isinstance(key, str):
+            continue
         location = _export_location(key)
         if not location:
             continue
-        help_mode = state.get("helpModes", {}).get(key, "physical")
+        cost = _to_number(-entry.get("delta", 0))
+        help_mode = entry.get("helpMode") or state.get("helpModes", {}).get(key, "physical")
+        selected = entry.get("selectedDetails")
+        if selected is None:
+            selected = selected_details(state, key)
         records.append({
             **location,
+            "entryId": entry.get("id"),
+            "executionNumber": entry.get("run"),
             "mode": "1. 被動 - 語音" if help_mode == "voice" else "1. 被動 - 實體",
             "modeCode": 1,
             "helpMode": help_mode,
             "status": "accepted",
             "cost": cost,
-            "timestamp": timestamp("help", key),
+            "timestamp": entry.get("ts"),
             "pointChanges": [{"pool": "assist", "delta": -cost}],
-            **_export_selection(key, selected_details(state, key)),
+            **_export_selection(key, selected),
         })
 
     for key, result in (state.get("proactive") or {}).items():

@@ -17,7 +17,7 @@ const SHOW_STEP_COST = false;
 // 上方點數卡要不要顯示「剩餘主動幫助點數」那一行。
 // false ＝ 整行（標題與數字）都不出現，參與者只看得到「剩餘可指揮助手點數」。
 // 只影響參與者畫面；控制台永遠看得到這個數字。
-const SHOW_PROACTIVE_POINTS = false;
+const SHOW_PROACTIVE_POINTS = true;
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
 // 「預覽全部步驟」每個步驟停留的毫秒數；2000 ＝ 2 秒。
@@ -56,10 +56,7 @@ const elements = {
   remainingProactiveLabel: document.querySelector("#remaining-proactive-label"),
   remainingProactiveValue: document.querySelector("#remaining-proactive-value"),
   currentStep: document.querySelector("#current-step"),
-  stepTotal: document.querySelector("#step-total"),
-  progressBar: document.querySelector("#progress-bar"),
   mealName: document.querySelector("#top-meal"),
-  stageName: document.querySelector("#top-stage"),
   mealIconWrap: document.querySelector("#meal-icon-wrap"),
   mealIcon: document.querySelector("#meal-icon"),
   actionColumn: document.querySelector("#action-column"),
@@ -69,8 +66,6 @@ const elements = {
   detailList: document.querySelector("#detail-list"),
   stepImage: document.querySelector("#step-image"),
   imagePlaceholder: document.querySelector("#image-placeholder"),
-  prevButton: document.querySelector("#prev-button"),
-  nextButton: document.querySelector("#next-button"),
   fullscreenButton: document.querySelector("#fullscreen-button"),
   fullscreenLabel: document.querySelector("#fullscreen-label"),
   previewStatus: document.querySelector("#preview-status"),
@@ -517,28 +512,19 @@ function render() {
 
   updateCosts();
   updateRemainingPoints();
-  elements.currentStep.textContent = slide.step;
-  elements.stepTotal.textContent = ` / ${slides.length}`;
-  elements.progressBar.style.width = `${((currentIndex + 1) / slides.length) * 100}%`;
+  elements.currentStep.textContent = `步驟 ${slide.step}/${slides.length}`;
 
   const mealName = cleanLabel(slide.meal);
   const stageName = cleanLabel(slide.stage);
-  elements.mealName.textContent = mealName;
-  elements.mealName.hidden = !mealName;
-  elements.stageName.textContent = stageName;
-  elements.stageName.hidden = !stageName;
+  const stageTitle = [mealName, stageName].filter(Boolean).join(" - ");
+  elements.mealName.textContent = stageTitle;
+  elements.mealName.hidden = !stageTitle;
 
   showStageIcon(slide);
 
   renderActions(slide);
   highlightCurrentStep();
   autoScroll(true);
-
-  elements.prevButton.disabled = currentIndex === 0;
-  elements.nextButton.disabled = currentIndex === slides.length - 1;
-  elements.nextButton.innerHTML = currentIndex === slides.length - 1
-    ? '已完成 <span aria-hidden="true">✓</span>'
-    : '下一步 <span aria-hidden="true">→</span>';
 
   renderedIndex = currentIndex;
 }
@@ -681,7 +667,7 @@ function applyState(state) {
 }
 
 function moveSlide(direction) {
-  // 說明卡蓋著的時候不能換頁（按鈕與方向鍵都走這裡），先看完再說。
+  // 說明卡蓋著的時候不能用方向鍵換頁，要先看完再說。
   if (overlayKey || isPreviewing) return;
   const nextIndex = Math.max(0, Math.min(slides.length - 1, currentIndex + direction));
   if (nextIndex === currentIndex) return;
@@ -713,8 +699,6 @@ elements.scrollCue.addEventListener("click", () => {
   elements.actionList.scrollBy({ top: elements.actionList.clientHeight * 0.8, behavior: "smooth" });
 });
 
-elements.prevButton.addEventListener("click", () => moveSlide(-1));
-elements.nextButton.addEventListener("click", () => moveSlide(1));
 elements.fullscreenButton.addEventListener("click", async () => {
   try {
     if (!document.fullscreenElement) {
