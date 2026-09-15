@@ -1,0 +1,603 @@
+:root {
+  color-scheme: light;
+  /* 沿用參與者畫面的配色，但這一頁是給實驗者看的，密度高很多。 */
+  --ink: #20221f;
+  --muted: #777b73;
+  --line: #e6e7e1;
+  --soft: #f7f7f4;
+  --white: #ffffff;
+  --panel-bg: #fafaf8;
+  --blue: #425d4a;
+  --blue-light: #e9efe9;
+  --blue-accent: #ce7144;
+  --cost-text: #9d4e2d;
+  --cost-bg: #fbede6;
+  --helped-border: #d99b1c;
+  --helped-bg: #fdf6e6;
+  --helped-badge-text: #8a5c00;
+  /* 等級 2：語音提醒建議。 */
+  --reminder-border: #3f8a5d;
+  --reminder-bg: #e8f5ec;
+  --reminder-text: #24643b;
+  /* 等級 4：直接實體介入。 */
+  --direct-border: #8a5bb5;
+  --direct-bg: #f2ebf8;
+  --direct-text: #5e3782;
+  /* 助手主動提議：跟「助手介入」的琥珀色分開，用藍色系。 */
+  --proactive-border: #3f7cae;
+  --proactive-bg: #eaf2f9;
+  --proactive-text: #1f4f76;
+  /* 主動按鈕寬度＝下方兩顆被動按鈕合計寬度。 */
+  --intervention-controls-width: 300px;
+  --done-bg: #f0f1ed;
+  --done-button: #4b5054;
+  --done-button-hover: #3d4246;
+  --done-button-checked: #24292d;
+  --plus: #2f6b46;
+  --minus: #b3372c;
+  --offline-ink: #ffffff;
+  --offline-bg: #b3372c;
+  --shadow: rgba(34, 40, 30, .07);
+
+  /* 版面 */
+  --top-height: 74px;
+  --points-panel-width: 400px;
+
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  display: grid;
+  grid-template-rows: var(--top-height) minmax(0, 1fr);
+  gap: 12px;
+  height: 100vh;
+  margin: 0;
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--soft);
+}
+
+button, input { font: inherit; color: inherit; }
+h2, h3 { margin: 0; }
+
+/* ===== 上方：頁面切換 ===== */
+
+.wizard-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+
+.page-switcher { display: flex; gap: 8px; align-items: center; }
+.page-toggle { display: flex; gap: 4px; }
+
+.page-button {
+  position: relative;
+  width: 38px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  font-size: .95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.page-button:hover { border-color: var(--blue); background: var(--blue-light); }
+.page-button.current { color: var(--white); border-color: var(--ink); background: var(--ink); }
+/* 已經有勾選紀錄的頁面：右上角一個小點 */
+.page-button.touched::after {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue-accent);
+  content: "";
+}
+
+.page-arrow {
+  width: 34px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--white);
+  cursor: pointer;
+}
+.page-arrow:hover:not(:disabled) { background: var(--panel-bg); }
+.page-arrow:disabled { opacity: .3; cursor: not-allowed; }
+
+.page-meta { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.page-meta-index { color: var(--muted); font-size: .95rem; font-weight: 650; white-space: nowrap; }
+.page-meta-name { color: var(--blue); font-size: 1.25rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.conn { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; font-weight: 650; white-space: nowrap; }
+.conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.conn[data-status="connected"] { color: var(--plus); }
+.conn[data-status="connected"] .conn-dot { background: var(--plus); }
+.conn[data-status="disconnected"] { color: var(--minus); }
+.conn[data-status="disconnected"] .conn-dot { background: var(--minus); }
+
+/* ===== 主體 ===== */
+
+.wizard-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
+  gap: 12px;
+  min-height: 0;
+}
+
+.panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--white);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+
+.panel-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-bg);
+}
+.panel-head h2 { font-size: 1.05rem; }
+.panel-count { margin-left: 6px; color: var(--muted); font-size: .9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.panel-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+.ghost-button {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: .85rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.ghost-button:hover:not(:disabled) { border-color: var(--blue); background: var(--blue-light); }
+.ghost-button:disabled { opacity: .35; cursor: not-allowed; }
+.ghost-button.is-on { color: var(--white); border-color: var(--minus); background: var(--minus); }
+.ghost-button.is-on:hover:not(:disabled) { border-color: #922b23; background: #922b23; }
+
+/* ===== 步驟清單 ===== */
+
+/* panel-head ＋ Client 查看提示 ＋ 說明卡提示列 ＋ 清單。 */
+.steps-panel { grid-template-rows: auto auto auto minmax(0, 1fr); }
+
+.client-view-status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--proactive-border);
+  background: var(--proactive-bg);
+  color: var(--proactive-text);
+  font-size: .88rem;
+  font-weight: 700;
+}
+.client-view-status[hidden] { display: none; }
+.client-view-status-dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--proactive-border); }
+.client-view-status .ghost-button { margin-left: auto; flex-shrink: 0; }
+
+.overlay-status {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--helped-border);
+  background: var(--helped-bg);
+  color: var(--helped-badge-text);
+  font-size: .88rem;
+  font-weight: 650;
+}
+.overlay-status[hidden] { display: none; }
+.overlay-status-dot { width: 9px; height: 9px; flex-shrink: 0; border-radius: 50%; background: var(--helped-border); }
+/* 顯示中的是主動提議卡時換成藍色，跟卡片本身一致。 */
+.overlay-status[data-mode="proactive"] { border-bottom-color: var(--proactive-border); background: var(--proactive-bg); color: var(--proactive-text); }
+.overlay-status[data-mode="proactive"] .overlay-status-dot { background: var(--proactive-border); }
+.overlay-status[data-intervention-level="2"] { border-bottom-color: var(--reminder-border); background: var(--reminder-bg); color: var(--reminder-text); }
+.overlay-status[data-intervention-level="2"] .overlay-status-dot { background: var(--reminder-border); }
+.overlay-status[data-intervention-level="4"] { border-bottom-color: var(--direct-border); background: var(--direct-bg); color: var(--direct-text); }
+.overlay-status[data-intervention-level="4"] .overlay-status-dot { background: var(--direct-border); }
+.overlay-status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overlay-status .ghost-button { margin-left: auto; flex-shrink: 0; }
+
+.step-list { display: grid; grid-auto-rows: max-content; gap: 8px; min-height: 0; padding: 12px 16px; overflow-y: auto; scrollbar-width: thin; }
+
+.step-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--white);
+  transition: background .15s ease, border-color .15s ease;
+}
+.step-row.is-helped { border-color: var(--helped-border); background: var(--helped-bg); }
+.step-row.is-done { background: var(--done-bg); }
+.step-row.is-done.is-helped { background: var(--helped-bg); }
+.step-row.is-helped.is-help-reminder { border-color: var(--reminder-border); background: var(--reminder-bg); }
+.step-row[data-proactive-level="4"] { --proactive-border: var(--direct-border); --proactive-bg: var(--direct-bg); --proactive-text: var(--direct-text); }
+.step-row.is-done .step-name { color: var(--muted); text-decoration: line-through; }
+
+.check { display: flex; gap: 6px; align-items: center; font-size: .88rem; font-weight: 650; white-space: nowrap; cursor: pointer; user-select: none; }
+.check input { width: 22px; height: 22px; margin: 0; flex-shrink: 0; accent-color: var(--blue); cursor: pointer; }
+.done-check { position: relative; padding-top: 0; }
+/* 「完成」也不顯示原生 checkbox，直接點整塊文字框。 */
+.done-check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.done-check > span {
+  display: block;
+  padding: 8px 12px;
+  color: var(--white);
+  border: 1px solid var(--done-button);
+  border-radius: 8px;
+  background: var(--done-button);
+  transition: color .15s ease, background .15s ease;
+}
+.done-check:hover > span { background: var(--done-button-hover); }
+.done-check input:checked + span { border-color: var(--done-button-checked); background: var(--done-button-checked); }
+.done-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+.proactive-check input { accent-color: var(--proactive-border); }
+
+.step-body { display: grid; gap: 7px; min-width: 0; }
+.step-title { display: flex; gap: 9px; align-items: baseline; min-width: 0; }
+.step-index { color: var(--muted); font-size: 1.15rem; font-weight: 750; letter-spacing: .06em; }
+.step-name { min-width: 0; font-size: 1.2rem; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+.step-image-mark { flex-shrink: 0; font-size: .82rem; cursor: help; }
+.step-list-price { padding: 3px 9px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+
+.step-row.is-client-view { border-color: var(--proactive-border); box-shadow: inset 4px 0 0 var(--proactive-border); }
+.client-view-button {
+  margin-left: auto;
+  padding: 4px 9px;
+  color: var(--proactive-text);
+  border: 1px solid var(--proactive-border);
+  border-radius: 7px;
+  background: var(--white);
+  font-size: .76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.client-view-button:hover,
+.client-view-button.is-on { color: var(--white); background: var(--proactive-border); }
+
+.help-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 34px; }
+.repeatable-hint { flex-basis: 100%; color: var(--muted); font-size: .76rem; }
+.intervention-check {
+  position: relative;
+  flex: 0 0 var(--intervention-controls-width);
+  font-size: .86rem;
+}
+/* 介入模式不顯示原生 checkbox；整塊文字色塊就是可點擊的控制項。 */
+.intervention-check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.intervention-check > span {
+  display: block;
+  width: 100%;
+  padding: 7px 11px;
+  border: 1px solid;
+  border-radius: 8px;
+  text-align: center;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.intervention-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.passive-mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 0 0 var(--intervention-controls-width);
+  gap: 6px;
+}
+.passive-mode-button {
+  padding: 7px 11px;
+  border: 1px solid;
+  border-radius: 8px;
+  font-size: .8rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+/* 實體＝琥珀色。 */
+.passive-mode-button.physical { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.passive-mode-button.physical:hover,
+.passive-mode-button.physical.is-on { color: var(--white); background: var(--helped-border); }
+/* 等級 1 的實體與語音都維持橘色。 */
+.passive-mode-button.voice { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.passive-mode-button.voice:hover,
+.passive-mode-button.voice.is-on { color: var(--white); background: var(--helped-border); }
+.passive-mode-button.voice_reminder { grid-column: 1 / -1; color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
+.passive-mode-button.voice_reminder:hover { color: var(--white); background: var(--reminder-border); }
+.passive-mode-button:disabled { opacity: .4; cursor: not-allowed; }
+.passive-mode-button.voice_reminder:disabled:hover { color: var(--reminder-text); background: var(--reminder-bg); }
+.cost-caption { color: var(--muted); font-size: .85rem; font-weight: 600; }
+.cost-input {
+  width: 70px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--white);
+  font-size: .9rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.cost-input:focus { border-color: var(--blue); outline: none; }
+.cost-input:disabled { color: var(--helped-badge-text); background: var(--panel-bg); }
+.step-row.is-help-reminder .cost-input:disabled { color: var(--reminder-text); }
+
+.overlay-button {
+  margin-left: 0;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--white);
+  font-size: .8rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.overlay-button:hover:not(:disabled) { border-color: var(--helped-border); background: var(--helped-bg); }
+.overlay-button:disabled { opacity: .3; cursor: not-allowed; }
+.overlay-button.is-on { color: var(--white); border-color: var(--helped-border); background: var(--helped-border); }
+.step-row.is-showing { box-shadow: 0 0 0 2px var(--helped-border); }
+
+/* ===== 助手主動提議 ===== */
+/* 只有 Excel「介入」欄標過 O 的步驟才有這一列。 */
+.proactive-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  margin-bottom: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--proactive-border);
+}
+.proactive-check { font-weight: 800; }
+/* 主動介入預設等級 3 藍色；等級 4 由 step-row 的變數覆寫成紫色。 */
+.proactive-check > span { color: var(--proactive-text); border-color: var(--proactive-border); background: var(--proactive-bg); }
+.proactive-check:hover > span,
+.proactive-check input:checked + span { color: var(--white); background: var(--proactive-border); }
+.proactive-row .cost-input:disabled { color: var(--proactive-text); }
+
+.answer-button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--white);
+  font-size: .8rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.answer-button.accept { margin-left: 0; }
+.answer-button.accept:hover { border-color: var(--plus); background: #eef6f1; }
+.answer-button.decline:hover { border-color: var(--minus); background: #fbeeec; }
+.answer-button.accept.is-on { color: var(--white); border-color: var(--plus); background: var(--plus); }
+.answer-button.decline.is-on { color: var(--white); border-color: var(--minus); background: var(--minus); }
+
+/* 有主動提議的步驟：左緣一條藍線，wizard 一眼掃得到那 14 個步驟。 */
+.step-row.has-proactive { box-shadow: inset 3px 0 0 var(--proactive-border); }
+.step-row.is-proactive-accepted { border-color: var(--proactive-border); background: var(--proactive-bg); }
+.step-row.is-proactive-declined { border-color: var(--proactive-border); }
+.step-row.is-proactive-showing {
+  border-color: var(--proactive-border);
+  background: var(--proactive-bg);
+  box-shadow: inset 3px 0 0 var(--proactive-border), 0 0 0 2px var(--proactive-border);
+}
+/* 已完成／已介入的底色要壓過主動提議的底色，維持既有的優先順序。 */
+.step-row.is-done.is-proactive-accepted { background: var(--done-bg); }
+.step-row.is-helped.is-proactive-accepted { background: var(--helped-bg); }
+
+/* ===== 詳細步驟 ===== */
+
+.detail-block { display: grid; gap: 6px; padding-top: 3px; }
+.detail-head { display: flex; gap: 6px; align-items: center; }
+
+.detail-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 4px 3px 0;
+  color: var(--muted);
+  border: 0;
+  background: transparent;
+  font-size: .82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.detail-toggle:hover { color: var(--ink); }
+.detail-caret { width: .8em; color: var(--blue); font-size: .75rem; }
+.detail-count { color: var(--blue); font-variant-numeric: tabular-nums; }
+
+.mini-button {
+  padding: 3px 8px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  font-size: .76rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.mini-button:hover { color: var(--ink); border-color: var(--blue); background: var(--blue-light); }
+
+/* 直向一條一條列，順序與編號跟參與者說明卡一致。 */
+.detail-checks {
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-bg);
+}
+.detail-checks[hidden] { display: none; }
+.detail-check {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: .84rem;
+  line-height: 1.4;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.detail-check input { width: 15px; height: 15px; margin: 0; flex-shrink: 0; accent-color: var(--helped-border); cursor: pointer; }
+.detail-executed { flex-shrink: 0; padding: 1px 5px; color: var(--helped-badge-text); border-radius: 4px; background: var(--helped-bg); font-size: .7rem; font-weight: 750; white-space: nowrap; }
+.detail-executed[hidden] { display: none; }
+.detail-check-index { flex-shrink: 0; color: var(--helped-badge-text); font-size: .78rem; font-weight: 800; letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+.detail-check-text { min-width: 0; }
+/* 沒有勾＝這次不代勞，參與者的說明卡上不會出現這一條。 */
+.detail-check:has(input:not(:checked)) .detail-check-index,
+.detail-check:has(input:not(:checked)) .detail-check-text { color: var(--muted); text-decoration: line-through; }
+/* 在主動提議範圍內的那幾條：編號前加一個藍點。只是記號，不影響勾選。 */
+.detail-check.is-proactive .detail-check-index::before { margin-right: 3px; color: var(--proactive-border); content: "●"; font-size: .7em; }
+
+/* ===== 點數面板 ===== */
+
+.points-panel { grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto; }
+
+/* 左右兩格分別顯示可指揮助手池與主動幫助池的「剩餘 / 總額」。 */
+.points-readout { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+.points-box { display: grid; gap: 4px; align-content: start; padding: 14px 16px; background: var(--white); }
+.points-box.accent { background: var(--blue-light); }
+.points-box.proactive { background: var(--proactive-bg); }
+.points-box.proactive .points-value { color: var(--proactive-text); }
+.points-label { color: var(--muted); font-size: .85rem; font-weight: 650; }
+.points-value { font-size: 2.1rem; line-height: 1; font-variant-numeric: tabular-nums; }
+/* 兩格都是「剩餘 / 總額」，字級稍小才放得下。 */
+.points-box .points-value { font-size: 1.6rem; }
+.points-value.negative { color: var(--minus); }
+
+.sound-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.sound-controls .ghost-button { padding: 7px 9px; white-space: nowrap; }
+.sound-toggle[aria-pressed="true"] { color: var(--proactive-text); border-color: var(--proactive-border); background: var(--proactive-bg); }
+.sound-select { min-width: 0; width: 100%; padding: 7px 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); font-size: .82rem; }
+.sound-controls small { grid-column: 1 / -1; color: var(--muted); font-size: .72rem; }
+
+.adjust { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.adjust-label { color: var(--muted); font-size: .85rem; font-weight: 650; white-space: nowrap; }
+.adjust-input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 1rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.adjust-input:focus { border-color: var(--blue); outline: none; }
+.adjust-button { padding: 8px 12px; border: 1px solid transparent; border-radius: 8px; font-size: .88rem; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.adjust-button.add { color: var(--white); background: var(--plus); }
+.adjust-button.sub { color: var(--white); background: var(--minus); }
+.adjust-button:hover { filter: brightness(1.1); }
+
+.ledger-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px 8px; }
+.ledger-head h3 { font-size: .98rem; }
+.ledger-actions { display: flex; gap: 6px; align-items: center; }
+
+.ledger { display: grid; grid-auto-rows: max-content; gap: 4px; min-height: 0; margin: 0; padding: 0 16px 12px; overflow-y: auto; list-style: none; scrollbar-width: thin; }
+.ledger-row {
+  display: grid;
+  /* 頁數 / 步驟 / 介入模式 / 說明 / 點數變化；時間保留在資料但不顯示。 */
+  grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  font-size: .84rem;
+}
+.ledger-page { color: var(--ink); font-size: .78rem; font-weight: 800; white-space: nowrap; }
+.ledger-step { color: var(--muted); font-weight: 800; white-space: nowrap; }
+.ledger-mode { padding: 2px 7px; border-radius: 99px; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+.ledger-row.mode-1 .ledger-mode { color: var(--helped-badge-text); background: var(--helped-bg); }
+.ledger-row.mode-2 .ledger-mode { color: var(--reminder-text); background: var(--reminder-bg); }
+.ledger-row.mode-3 .ledger-mode { color: var(--proactive-text); background: var(--proactive-bg); }
+.ledger-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-changes { display: flex; flex-wrap: wrap; gap: 3px 7px; justify-content: flex-end; }
+.ledger-delta { font-size: .76rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ledger-delta.plus { color: var(--plus); }
+.ledger-delta.minus { color: var(--minus); }
+.ledger-partial-banner {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 4px;
+  padding: 8px 10px;
+  color: var(--ink);
+  border: 1px solid var(--helped-border);
+  border-radius: 7px;
+  background: var(--helped-bg);
+  font-size: .76rem;
+  line-height: 1.4;
+}
+.ledger-partial-banner strong { color: var(--helped-badge-text); }
+.ledger-partial-banner .picked { color: var(--plus); }
+.ledger-partial-banner .unpicked { color: var(--minus); }
+.ledger-empty { padding: 14px 0; color: var(--muted); font-size: .88rem; text-align: center; }
+
+.danger-button {
+  margin: 0 16px 14px;
+  padding: 9px;
+  color: var(--minus);
+  border: 1px solid var(--minus);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: .88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.danger-button:hover { color: var(--white); background: var(--minus); }
+
+/* ===== 未連線提示 ===== */
+
+.offline-banner {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  z-index: 10;
+  padding: 10px 20px;
+  color: var(--offline-ink);
+  border-radius: 99px;
+  background: var(--offline-bg);
+  box-shadow: 0 8px 24px var(--shadow);
+  font-size: .92rem;
+  font-weight: 650;
+  transform: translateX(-50%);
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); }
+
+@media (max-width: 1180px) {
+  :root { --points-panel-width: 340px; }
+  .page-button { width: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}

@@ -2,7 +2,10 @@
 """Extract the recipe slide data from the source workbook without dependencies."""
 
 import json
+import argparse
 import re
+import shutil
+import datetime
 import unicodedata
 from collections import OrderedDict
 from pathlib import Path
@@ -19,9 +22,16 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 SOURCE = DATA_DIR / "User Study v3.xlsx"
 OUTPUT = DATA_DIR / "recipe-data.js"
-SHEET_NAME = "食譜excel v2"
+SHEET_NAME = "食譜excel v3"
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+# 「餐點」「階段」欄裡代表「沒有內容」的寫法（與前端 cleanLabel 一致）。
+PLACEHOLDER_LABELS = {"", "-", "—"}
+# 標記「這條詳細動作屬於助手主動提議的範圍」的欄位與值。
+PROACTIVE_HEADER = "介入"
+PROACTIVE_MARK = "O"
+PROACTIVE_LEVEL_HEADER = "主動程度"
+PROACTIVE_LEVELS = {"3. 詢問後", "4. 直接"}
 
 
 def worksheet_path(archive):
@@ -88,6 +98,11 @@ def extract():
         missing = [name for name in required if name not in columns]
         if missing:
             raise ValueError(f"缺少必要欄位：{', '.join(missing)}")
+        # 「介入」欄不是必要欄位：沒有這一欄就當成整份食譜都沒有主動幫助，
+        # 舊的 workbook 仍然開得起來。
+        proactive_column = columns.get(PROACTIVE_HEADER)
+        # 舊版 Excel 沒有「主動程度」時，前端會沿用原本的「3. 詢問後」。
+        proactive_level_column = columns.get(PROACTIVE_LEVEL_HEADER)
 
         for row in rows:
             meal = row.get(columns["餐點"], "")
@@ -120,6 +135,8 @@ def extract():
                     "name": action_name.replace("\n", " "),
                     "cost": float(cost_match.group()) if cost_match else 0,
                     "details": [],
+                    # 「介入」欄標 O 的那幾條詳細動作的索引，沒有就是空陣列。
+                    "proactive": [],
                 }
                 if current_action["cost"] != 0 and current_action["cost"].is_integer():
                     current_action["cost"] = int(current_action["cost"])
@@ -127,11 +144,46 @@ def extract():
 
             detail = row.get(columns["步驟內容"], "")
             if current_action is not None and detail:
+                # 記的是 details 的索引，所以一定要在真的 append 之前算、
+                # 而且只在這個 if 裡面做：萬一哪天出現「有 O 但沒有步驟內容」
+                # 的列，那一列不會產生 detail，索引也就不會整排位移。
+                marked = proactive_column and (
+                    (row.get(proactive_column) or "").strip().upper() == PROACTIVE_MARK
+                )
+                if marked:
+                    level = (row.get(proactive_level_column) or "").strip() if proactive_level_column else ""
+                    if level:
+                        if level not in PROACTIVE_LEVELS:
+                            raise ValueError(f"不支援的主動程度：{level!r}（步驟：{current_action['name']}）")
+                        previous = current_action.get("proactiveLevel")
+                        if previous and previous != level:
+                            raise ValueError(f"同一步驟有不同的主動程度：{current_action['name']}")
+                        current_action["proactiveLevel"] = level
+                    current_action["proactive"].append(len(current_action["details"]))
                 current_action["details"].append(
                     " ".join(detail.split())
                 )
 
     return slides
+
+
+def is_placeholder(value):
+    return (value or "").strip() in PLACEHOLDER_LABELS
+
+
+def drop_unlabelled(slides):
+    """「餐點」與「階段」都沒有內容的頁面不進食譜，頁碼重新排成連號。
+
+    回傳 (留下來的頁面, 被拿掉的頁面)。
+    """
+    kept, dropped = [], []
+    for slide in slides:
+        target = dropped if is_placeholder(slide["meal"]) and is_placeholder(slide["stage"]) else kept
+        target.append(slide)
+
+    for index, slide in enumerate(kept):
+        slide["step"] = str(index + 1)
+    return kept, dropped
 
 
 def format_cost(value):
@@ -191,9 +243,117 @@ def print_cost_summary(slides):
         print(fallback_pretty_table(headers, rows))
 
 
+def print_proactive_summary(slides):
+    """主動幫助的總額。這個數字就是 client 上「剩餘主動幫助點數」的起始值。
+
+    計價規則與 server/state.py 的 proactive_cost() 一致：
+    整個步驟都標 O ＝ 原價，只標幾條 ＝ 標到的條數。
+    """
+    rows = []
+    total = 0
+    for slide in slides:
+        for index, action in enumerate(slide["actions"]):
+            marks = len(action["proactive"])
+            if not marks:
+                continue
+            details = len(action["details"])
+            cost = action["cost"] if details and marks == details else min(marks, action["cost"])
+            total += cost
+            rows.append([
+                f"第{slide['step']}頁 · 步驟{index + 1:02d}",
+                f"{marks}/{details}",
+                format_cost(cost),
+                action["name"],
+            ])
+
+    print(f"\n{SHEET_NAME}：主動幫助（「{PROACTIVE_HEADER}」欄標 {PROACTIVE_MARK}）")
+    if not rows:
+        print("（沒有任何標記）")
+        return
+
+    headers = ["步驟", "標記/全部", "花費", "步驟名稱"]
+    if PrettyTable is not None:
+        table = PrettyTable()
+        table.field_names = headers
+        table.align = "l"
+        table.align["花費"] = "r"
+        table.add_rows(rows)
+        print(table)
+    else:
+        print(fallback_pretty_table(headers, rows))
+    print(f"合計：{len(rows)} 個步驟 / {format_cost(total)}")
+
+
+def migrate_step_images(old_slides, new_slides):
+    """Move numbered images by unique action name, keeping all originals in a backup."""
+    directory = ROOT / "images" / "steps"
+    if not directory.is_dir() or old_slides == new_slides:
+        return
+    old_actions = {
+        f"{int(slide['step'])}-{index + 1}": action['name']
+        for slide in old_slides for index, action in enumerate(slide['actions'])
+    }
+    old_occurrences = {}
+    for key, name in old_actions.items():
+        old_occurrences.setdefault(name, []).append(key)
+    destinations = {}
+    for slide in new_slides:
+        for index, action in enumerate(slide['actions']):
+            destinations.setdefault(action['name'], []).append(
+                f"{int(slide['step']):02d}-{index + 1:02d}"
+            )
+    files = [path for path in sorted(directory.iterdir())
+             if path.is_file() and re.fullmatch(r"\d+(?:[-_]\d+)?", path.stem)
+             and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}]
+    if not files:
+        return
+    backup = ROOT / "images" / f"steps-backup-{datetime.datetime.now():%Y%m%d-%H%M%S-%f}"
+    backup.mkdir()
+    # Finish copying the backup before changing any currently served image.
+    for path in files:
+        shutil.copy2(path, backup / path.name)
+    for path in files:
+        path.unlink()
+    mapped = 0
+    report = []
+    for path in files:
+        parts = re.split(r"[-_]", path.stem)
+        key = "-".join(str(int(part)) for part in parts)
+        name = old_actions.get(key)
+        targets = destinations.get(name, [])
+        # Repeated unchanged steps (e.g. cleanup) keep their order when both
+        # versions contain the same number of occurrences.
+        occurrences = old_occurrences.get(name, [])
+        if len(targets) == 1 or (targets and len(targets) == len(occurrences)):
+            target_index = 0 if len(targets) == 1 else occurrences.index(key)
+            target = directory / (targets[target_index] + path.suffix.lower())
+            shutil.copy2(backup / path.name, target)
+            mapped += 1
+            report.append(f"{path.name} -> {target.name}: {name}")
+        else:
+            report.append(f"未配對，保留在備份：{path.name}: {name or '整頁圖片或未知步驟'}")
+    (backup / "migration.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print(f"圖片已配對 {mapped}/{len(files)}；原圖與對照表：{backup}")
+    for line in report:
+        if line.startswith("未配對"):
+            print(line)
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--migrate-images", action="store_true",
+                        help="根據現有 recipe-data.js 的步驟名稱搬移圖片，並保留原圖備份")
+    args = parser.parse_args()
     DATA_DIR.mkdir(exist_ok=True)
-    slides = extract()
+    slides, dropped = drop_unlabelled(extract())
+    if args.migrate_images and OUTPUT.exists():
+        previous = OUTPUT.read_text(encoding="utf-8")
+        old_slides = json.loads(re.sub(r"^.*?window\.RECIPE_SLIDES\s*=\s*", "", previous,
+                                      count=1, flags=re.S).strip().rstrip(";"))
+        migrate_step_images(old_slides, slides)
+    for slide in dropped:
+        names = "、".join(action["name"] for action in slide["actions"]) or "（沒有步驟）"
+        print(f"略過原第 {slide['step']} 頁：餐點與階段都是「-」—— {names}")
     data = json.dumps(slides, ensure_ascii=False, indent=2)
     OUTPUT.write_text(
         f"// Generated from User Study v3.xlsx ({SHEET_NAME}). Run scripts/extract_recipe.py to refresh.\n"
@@ -202,3 +362,4 @@ if __name__ == "__main__":
     )
     print(f"Wrote {OUTPUT.name}")
     print_cost_summary(slides)
+    print_proactive_summary(slides)

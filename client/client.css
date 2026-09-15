@@ -1,0 +1,608 @@
+:root {
+  color-scheme: light;
+  /* ===== 全站色彩：要更換整體配色時，修改這一區 ===== */
+  --ink: #20221f;
+  --muted: #777b73;
+  --line: #e6e7e1;
+  --soft: #f7f7f4;
+  --neutral-tint: #edf0ea;
+  --blue: #425d4a;
+  --blue-light: #e9efe9;
+  --blue-accent: #ce7144;
+  --white: #ffffff;
+  --panel-bg: #fafaf8;
+  --card-hover-bg: #fbfcfa;
+  --card-hover-border: #b7c2b8;
+  --cost-text: #9d4e2d;
+  --cost-bg: #fbede6;
+  /* 現在該做的那一步：本頁還沒完成、編號最小的步驟 */
+  --active-bg: #d7e3d8;
+  --active-border: #3d5745;
+  --active-bar: #ce7144;
+  --active-ink: #1b2a1f;
+  --active-shadow: rgba(45, 62, 43, .16);
+  /* 已完成的步驟：灰階強度 0～1、透明度 0～1 */
+  --done-grayscale: 1;
+  --done-opacity: .45;
+  /* 接受幫助的步驟 */
+  --helped-border: #d99b1c;
+  --helped-bg: #fdf6e6;
+  --helped-badge-text: #8a5c00;
+  --helped-badge-bg: #f6e2b0;
+  /* 接受幫助時浮出來的整頁說明卡 */
+  --overlay-scrim: rgba(28, 33, 26, .55);
+  /* 說明卡上「這條要參與者自己做」的淺灰色（wizard 沒有勾的動作） */
+  --help-card-off-text: #b4b7ae;
+  /* 助手主動提議卡：跟「接受幫助」的說明卡用不同色系，讓兩張卡一眼分得出來。 */
+  --proactive-border: #3f7cae;
+  --proactive-bg: #eaf2f9;
+  --proactive-text: #1f4f76;
+  --proactive-badge-bg: #d6e6f3;
+  /* 等級 2：語音提醒建議；等級 4：直接實體介入。 */
+  --reminder-border: #3f8a5d;
+  --reminder-bg: #e8f5ec;
+  --reminder-text: #24643b;
+  --direct-border: #8a5bb5;
+  --direct-bg: #f2ebf8;
+  --direct-text: #5e3782;
+  --proactive-accepted-text: #2f6b3d;
+  --proactive-accepted-bg: #dff0e2;
+  --proactive-declined-text: #7a6a4a;
+  --proactive-declined-bg: #f0ebe0;
+  /* 未連線提示 */
+  --offline-ink: #ffffff;
+  --offline-bg: #b3372c;
+  --detail-text: #555950;
+  --action-number: #9b9e97;
+  --placeholder-text: #858b82;
+  --plate-ring: #dfe5dd;
+  --page-shadow: rgba(34, 40, 30, .05);
+  --plate-shadow: rgba(55, 67, 51, .1);
+
+  /* ===== 常用版面設定：請從這裡調整 ===== */
+  --top-panel-height: 200px;
+  --top-panel-height-compact: 118px;
+  --fullscreen-width: 76px;
+  --cost-panel-width: 1fr;
+  /* 標題從「剩餘點數」變成「剩餘可指揮助手點數」之後長很多，所以比花費卡再寬一點。 */
+  --points-panel-width: 1.15fr;
+  --step-panel-width: 1.15fr;
+  --stat-label-size: 2.3rem;
+  --stat-value-size: 3rem;
+  --stat-unit-size: 1.25rem;
+  --meal-label-size: 2.3rem;
+  /* 花費卡。預設跟其他卡一樣大；如果打開 client.js 的 SHOW_STEP_COST
+     變成兩行後覺得太擠，就把這兩個調小（會只影響這張卡）。 */
+  --cost-row-gap: 10px;
+  --cost-label-size: 2.3rem;
+  --cost-value-size: 3rem;
+  /* 點數卡也有兩行（可指揮助手／主動幫助）。標題比花費卡的長，
+     所以字級預設小一點；覺得太小就把這兩個調大。 */
+  --points-row-gap: 10px;
+  --points-label-size: 2.3rem;
+  --points-value-size: 3rem;
+  --progress-count-size: 1.8rem;
+  --step-name-size: 2rem;
+  --step-index-size: 1.5rem;
+  --cost-size: 1.5rem;
+  --action-gap: 16px;
+  /* 主畫面左側維持原本在 1440px 版面下約 610px 的寬度；
+     更寬的螢幕把新增空間留給右側步驟。 */
+  --preview-panel-width: clamp(360px, 44vw, 580px);
+  --action-column-gap: 20px;
+  --action-column-row-gap: 12px;
+  /* 少量步驟維持單欄與自然高度，也避免卡片在超寬螢幕上拉得太長。 */
+  --action-single-max-width: 800px;
+  /* 步驟圖片版位：佔左側面板的高度比例，其餘給「詳細步驟」。
+     --step-image-fit 用 contain 完整顯示整張圖（不裁切，兩側可能留空），
+     改成 cover 則會填滿版位但裁掉超出的部分。 */
+  --preview-image-height: 50%;
+  --step-image-fit: contain;
+  --detail-title-size: 1.35rem;
+  --detail-text-size: 1.2rem;
+  --detail-row-gap: 12px;
+  --detail-column-gap: 28px;
+  /* 階段圖示。高度 auto ＝ 吃滿整張卡（扣掉 padding）；寬度是上限，
+     圖片維持原比例縮到剛好放得下，不會變形也不會裁切。 */
+  --meal-icon-width: clamp(120px, 14vw, 260px);
+  --meal-icon-height: auto;
+  --meal-icon-height-compact: auto;
+  /* 整頁說明卡（接受幫助時浮出來的那張）。
+     詳細步驟固定直向排列，放不下才自動多開一欄，最多幾欄看 client.js 的
+     MAX_HELP_COLUMNS。 */
+  /* 由上而下：介入模式 → 餐點-階段-步驟N → 步驟名稱 →
+     詳細步驟（編號／文字）→ 圖例 → 本次花費（標籤／數字／「點」）。
+     每一塊各自一個變數，改哪一塊就改哪一個。 */
+  --help-card-step-size: 2rem;
+  --help-card-title-size: 2.5rem;
+  --help-card-action-size: 1.7rem;
+  /* Popup 寬度會依詳細步驟列數增加：最小值 +（列數 - 1）× 每列增加值，最高不超過最大值。 */
+  --help-card-min-width: 1000px;
+  --help-card-width-per-row: 50px;
+  --help-card-max-width: 1600px;
+  --help-card-min-height: 600px;
+  --help-card-max-height: 100%;
+  --help-card-image-width: 42%;
+  --help-card-image-fit: contain;
+  --help-card-index-size: .78em;
+  --help-card-item-size: 1.7rem;
+  --help-card-legend-size: 1.3rem;
+  --help-card-cost-label-size: 1.7rem;
+  --help-card-cost-size: 3.6rem;
+  --help-card-cost-unit-size: .4em;
+  /* 「預覽步驟中」大型 pop-out：要自行調整尺寸就改這三個值。 */
+  --preview-popup-width: min(1100px, calc(100vw - 48px));
+  --preview-popup-height: 190px;
+  --preview-popup-font-size: 3rem;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--soft);
+}
+
+button, a { font: inherit; }
+button { color: inherit; }
+
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--top-panel-height) minmax(0, 1fr);
+  gap: 14px;
+  width: calc(100% - 28px);
+  height: 100vh;
+  margin: 0 auto;
+  padding: 14px 0;
+}
+
+.stats {
+  position: relative;
+  display: grid;
+  /* 左到右：全螢幕鈕 / 階段＋圖片 / 兩行花費 / 剩餘點數 */
+  grid-template-columns: var(--fullscreen-width) var(--step-panel-width) var(--cost-panel-width) var(--points-panel-width);
+  gap: 1px;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--line);
+}
+
+.stat-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 20px;
+  align-items: center;
+  min-height: 0;
+  padding: 19px 26px;
+  background: var(--white);
+}
+/* 花費卡有兩行（此步驟／實驗），標題在左、數字靠右。 */
+.cost-card { align-content: center; gap: var(--cost-row-gap) 20px; }
+.cost-card .stat-label { max-width: none; font-size: var(--cost-label-size); }
+.cost-card .stat-value { font-size: var(--cost-value-size); }
+
+/* 點數卡同樣有兩行（可指揮助手／主動幫助），排法跟花費卡一致。 */
+.stat-card.accent { align-content: center; gap: var(--points-row-gap) 20px; background: var(--blue-light); }
+.stat-card.accent .stat-label { max-width: none; font-size: var(--points-label-size); }
+.stat-card.accent .stat-value { font-size: var(--points-value-size); }
+.stat-copy { min-width: 0; }
+.stat-label { display: block; max-width: 12em; color: var(--muted); font-size: var(--stat-label-size); font-weight: 650; line-height: 1.25; letter-spacing: .02em; overflow-wrap: anywhere; }
+/* 頁數在上、餐點與階段合併在下，右側圖示沿用原本的尺寸設定。
+   align-self: center 是因為整張卡用了 stretch（給圖示吃滿高度用的），
+   文字要單獨拉回垂直置中。 */
+.stage-title { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; align-self: center; min-width: 0; }
+.step-progress { color: var(--muted); font-size: var(--progress-count-size); font-weight: 750; font-variant-numeric: tabular-nums; }
+.stage-title .meal-label { max-width: none; }
+.stage-title > [hidden] { display: none; }
+/* 文字可換行，避免合併標題把右側圖示擠小。 */
+.step-card { grid-template-columns: minmax(0, 1fr) minmax(0, min(var(--meal-icon-width), 45%)); align-items: stretch; }
+.step-card:has(.meal-icon-wrap[hidden]) { grid-template-columns: minmax(0, 1fr); }
+.meal-label { color: var(--blue); font-size: var(--meal-label-size); font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
+.stat-value { display: block; margin: 0; font-size: var(--stat-value-size); line-height: 1; text-align: right; white-space: nowrap; }
+.stat-value small { color: var(--muted); font-size: var(--stat-unit-size); font-weight: 500; }
+/* 上面兩條的 display: block 會蓋掉瀏覽器內建的 [hidden]，所以要自己寫一次。
+   （client.js 的 SHOW_STEP_COST 用這個把「此步驟剩餘…」整行收掉。） */
+.stat-label[hidden], .stat-value[hidden] { display: none; }
+
+.recipe-stage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  padding: 20px 28px 24px;
+  overflow: hidden;
+  scroll-margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--white);
+  box-shadow: 0 20px 60px var(--page-shadow);
+}
+
+.fullscreen-card { display: grid; place-items: stretch; background: var(--white); }
+.fullscreen-button { display: flex; flex-direction: column; gap: 5px; align-items: center; justify-content: center; width: 100%; padding: 4px; color: var(--muted); border: 0; background: transparent; font-size: .68rem; cursor: pointer; }
+.fullscreen-icon { color: var(--blue); font-size: 1.1rem; line-height: 1; }
+.fullscreen-button:hover { color: var(--ink); background: var(--panel-bg); }
+
+.slide-layout { display: grid; grid-template-columns: var(--preview-panel-width) minmax(0, 1fr); gap: clamp(28px, 4vw, 56px); min-height: 0; }
+.action-column { position: relative; min-height: 0; overflow: hidden; }
+.action-column::before, .action-column::after {
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 56px;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+}
+.action-column::before { top: 0; background: linear-gradient(to bottom, var(--white) 15%, transparent); }
+.action-column::after { bottom: 0; background: linear-gradient(to top, var(--white) 30%, transparent); }
+.action-column.scroll-above::before { opacity: 1; }
+.action-column.scroll-below::after { opacity: 1; }
+
+.scroll-cue {
+  position: absolute;
+  z-index: 2;
+  bottom: 6px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  color: var(--blue);
+  border: 1px solid var(--card-hover-border);
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 6px 16px var(--plate-shadow);
+  font-size: .95rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity .2s ease, transform .2s ease;
+  pointer-events: none;
+  animation: scroll-cue-bounce 1.6s ease-in-out infinite;
+}
+.action-column.scroll-below .scroll-cue { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.scroll-cue:hover { color: var(--white); border-color: var(--blue); background: var(--blue); }
+
+@keyframes scroll-cue-bounce {
+  0%, 100% { margin-bottom: 0; }
+  50% { margin-bottom: 5px; }
+}
+/* 圖片用絕對定位貼滿版位：這樣高度不必靠百分比推算，
+   矮螢幕上也不會算成圖片原始高度而撐破卡片。 */
+.meal-icon-wrap { position: relative; justify-self: end; width: 100%; max-width: var(--meal-icon-width); height: var(--meal-icon-height); }
+.meal-icon-wrap[hidden] { display: none; }
+.meal-icon { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: right center; }
+.action-list { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--action-gap); height: 100%; min-height: 0; padding: 1px 10px 1px 1px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--card-hover-border) var(--line); }
+/* 單欄放不下而且右側夠寬時，client.js 才會加上 two-columns。
+   固定列數配合 grid-auto-flow: column，閱讀順序會先走完左欄再到右欄。 */
+.action-list.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--action-column-rows), max-content);
+  grid-auto-flow: column;
+  column-gap: var(--action-column-gap);
+  row-gap: var(--action-column-row-gap);
+}
+.action-list:not(.two-columns) .action-card { max-width: var(--action-single-max-width); }
+.action-list::-webkit-scrollbar { width: 9px; }
+.action-list::-webkit-scrollbar-track { border-radius: 99px; background: var(--line); }
+.action-list::-webkit-scrollbar-thumb { border-radius: 99px; background: var(--card-hover-border); }
+
+.action-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  min-height: 64px;
+  padding: 12px 15px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--white);
+  /* 參與者不能選取步驟，只能移入預覽詳細步驟。 */
+  cursor: default;
+  transition: border-color .2s ease, transform .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+/* 滑鼠移入：向右輕推一點並換邊框，不會超出版面。沒有 active bar，
+   底色也只是極淡的一層 —— 真正的顏色高亮固定屬於「現在該做的那一步」
+   （下面的 .active 排在後面，所以移入它時仍維持高亮的樣子）。 */
+.action-card:hover {
+  border-color: var(--card-hover-border);
+  background: var(--card-hover-bg);
+  transform: translateX(4px);
+}
+
+/* 接受幫助的步驟：底色與外框做記號，主要的辨識還是靠 .help-badge。
+   放在 active 之前，讓「現在該做的那一步」仍然最明顯。 */
+.action-card.helped {
+  border-color: var(--helped-border);
+  background: var(--helped-bg);
+}
+
+/* 現在該做的那一步：本頁還沒完成、編號最小的步驟，位置由程式決定。 */
+.action-card.active {
+  border-color: var(--active-border);
+  outline: none;
+  background: var(--active-bg);
+  box-shadow: inset 5px 0 0 var(--active-bar), 0 0 0 1px var(--active-border), 0 6px 18px var(--active-shadow);
+  transform: translateX(4px);
+}
+.action-card.active .action-name { color: var(--active-ink); }
+.action-card.active .action-number { color: var(--active-border); }
+
+/* Wizard 指定 Client 查看中的步驟；外觀獨立於正式的「目前步驟」。 */
+.action-card.client-view {
+  border-color: var(--proactive-border);
+  background: var(--proactive-bg);
+  box-shadow: inset 5px 0 0 var(--proactive-border), 0 0 0 1px var(--proactive-border);
+  transform: translateX(4px);
+}
+.action-card.client-view .action-name,
+.action-card.client-view .action-number { color: var(--proactive-text); }
+
+.action-number { color: var(--action-number); font-size: var(--step-index-size); font-weight: 700; letter-spacing: .08em; }
+.action-name { min-width: 0; font-size: var(--step-name-size); font-weight: 650; line-height: 1.3; letter-spacing: .01em; white-space: normal; overflow-wrap: anywhere; }
+/* 卡片右側的標籤群：點數在上、幫助標記在下，整組靠最右邊。
+   刻意做成 .action-card 的直接子元素，這樣同時已完成時會被灰階規則一起處理。 */
+.action-tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; justify-content: center; }
+.cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+/* 「接受幫助」的記號，卡片最右邊那顆。 */
+.help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+/* 有主動提議資格且未被拒絕的步驟；可能與 .help-badge 同時顯示。 */
+.proactive-badge { padding: 7px 11px; border-radius: 99px; color: var(--proactive-text); background: var(--proactive-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+/* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
+.action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
+
+/* 預覽走過的動作沿用正式完成的灰階外觀，但不會寫入 server 的 done。 */
+.action-card.preview-seen > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
+
+.preview-panel { display: grid; grid-template-rows: var(--preview-image-height) minmax(0, 1fr); min-height: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: var(--panel-bg); }
+.image-slot { position: relative; height: 100%; min-height: 0; margin: 0; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--neutral-tint); }
+.image-slot img { width: 100%; height: 100%; object-fit: var(--step-image-fit); }
+.image-placeholder { display: grid; place-items: center; align-content: center; height: 100%; color: var(--placeholder-text); font-size: .74rem; letter-spacing: .05em; }
+.image-placeholder[hidden] { display: none; }
+.image-placeholder p { margin: 10px 0 0; }
+
+.plate-art { position: relative; width: 80px; height: 50px; border-radius: 50%; background: var(--white); box-shadow: inset 0 0 0 9px var(--plate-ring), 0 8px 20px var(--plate-shadow); }
+.plate-art span { position: absolute; inset: 14px 25px; border-radius: 50% 50% 45% 45%; background: var(--blue-accent); transform: rotate(-8deg); }
+
+.detail-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; padding: 20px 24px; overflow: hidden; }
+.detail-panel h2 { margin: 0 0 16px; color: var(--blue); font-size: var(--detail-title-size); line-height: 1.3; }
+.detail-scroll { min-height: 0; padding-right: 8px; overflow-y: auto; }
+/* 直向一欄；column-count 由 client.js 的 fitDetailColumns() 在放不下時才加上去，
+   加上去之後多欄排版會自動把內容平均分配，而且仍是看完左欄再看右欄。 */
+.detail-panel ol { column-gap: var(--detail-column-gap); margin: 0; padding: 0; color: var(--detail-text); font-size: var(--detail-text-size); line-height: 1.55; list-style: none; counter-reset: detail-step; }
+.detail-panel li { position: relative; min-width: 0; margin-bottom: var(--detail-row-gap); padding: 0 4px 0 40px; overflow-wrap: anywhere; break-inside: avoid; counter-increment: detail-step; }
+.detail-panel li:last-child { margin-bottom: 0; }
+.detail-panel li::before { position: absolute; top: .05em; left: 0; content: counter(detail-step, decimal-leading-zero); color: var(--blue-accent); font-size: .82em; font-weight: 800; letter-spacing: .08em; }
+
+/* 預覽提示刻意做成不遮住內容的小型 pop-out，左右兩區仍可完整看見。 */
+.preview-status {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 25;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  width: var(--preview-popup-width);
+  min-height: var(--preview-popup-height);
+  padding: 28px 44px;
+  color: var(--white);
+  border: 3px solid rgba(255, 255, 255, .32);
+  border-radius: 30px;
+  background: var(--ink);
+  box-shadow: 0 12px 32px rgba(20, 26, 18, .28);
+  font-size: var(--preview-popup-font-size);
+  letter-spacing: .04em;
+  transform: translateX(-50%);
+  animation: preview-status-in .2s ease;
+}
+.preview-status[hidden] { display: none; }
+@keyframes preview-status-in {
+  from { opacity: 0; transform: translate(-50%, -10px) scale(.98); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+/* ===== 接受幫助的說明卡：蓋滿整個畫面，期間不能換頁 ===== */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vh, 48px);
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(3px);
+}
+.help-overlay[hidden] { display: none; }
+
+.help-card {
+  display: grid;
+  /* 標頭 / 詳細步驟 / 頁尾 */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(var(--help-card-auto-width, var(--help-card-min-width)), 100%);
+  min-height: min(var(--help-card-min-height), 100%);
+  max-height: min(var(--help-card-max-height), 100%);
+  overflow: hidden;
+  border: 2px solid var(--helped-border);
+  border-radius: 26px;
+  background: var(--white);
+  box-shadow: 0 30px 80px rgba(20, 26, 18, .35);
+  animation: help-card-in .26s ease;
+}
+
+@keyframes help-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 整張卡只有兩個色塊：奶油色的標頭 ＋ 其餘全白。
+   標題行不另外給底色，靠琥珀色與字級當「眉標」，跟下面的黑色步驟名稱分開。 */
+.help-card-head {
+  display: grid;
+  gap: 10px;
+  padding: clamp(18px, 2.8vh, 30px) clamp(24px, 3vw, 44px);
+  border-bottom: 1px solid var(--line);
+  background: var(--helped-bg);
+}
+/* 介入種類與觸發方式合併在同一行，階段資訊推到最右邊。 */
+.help-card-title { display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline; color: var(--helped-badge-text); }
+.help-card-step { margin-left: auto; font-size: var(--help-card-step-size); font-weight: 650; }
+.help-card-name { margin: 0; font-size: var(--help-card-title-size); font-weight: 750; line-height: 1.25; white-space: nowrap; }
+.help-card-action { margin: -2px 0 0; color: var(--ink); font-size: var(--help-card-action-size); font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
+/* 參與者已經回答過的主動提議，把結果標在眉標上。 */
+.help-card-answer { padding: 4px 14px; border-radius: 99px; font-size: var(--help-card-step-size); font-weight: 800; white-space: nowrap; }
+.help-card-answer[hidden] { display: none; }
+.help-card-answer[data-answer="accepted"] { color: var(--proactive-accepted-text); background: var(--proactive-accepted-bg); }
+.help-card-answer[data-answer="declined"] { color: var(--proactive-declined-text); background: var(--proactive-declined-bg); }
+
+/* 主動提議卡：同一塊 DOM，只換色系（藍）與外框，跟琥珀色的說明卡分開。 */
+.help-overlay[data-mode="proactive"] .help-card { border-color: var(--proactive-border); }
+.help-overlay[data-mode="proactive"] .help-card-head { background: var(--proactive-bg); }
+.help-overlay[data-mode="proactive"] .help-card-title { color: var(--proactive-text); }
+.help-overlay[data-intervention-level="2"] .help-card { border-color: var(--reminder-border); }
+.help-overlay[data-intervention-level="2"] .help-card-head { background: var(--reminder-bg); }
+.help-overlay[data-intervention-level="2"] .help-card-title { color: var(--reminder-text); }
+.help-overlay[data-intervention-level="4"] .help-card { border-color: var(--direct-border); }
+.help-overlay[data-intervention-level="4"] .help-card-head { background: var(--direct-bg); }
+.help-overlay[data-intervention-level="4"] .help-card-title { color: var(--direct-text); }
+
+.help-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, var(--help-card-image-width)) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 40px);
+  min-height: 0;
+  padding: clamp(18px, 3vh, 30px) clamp(24px, 3vw, 44px);
+  overflow: hidden;
+}
+.help-card-image {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--white);
+}
+.help-card-image img { width: 100%; height: 100%; object-fit: var(--help-card-image-fit); }
+.help-card-image-empty { display: grid; place-items: center; align-content: center; height: 100%; color: var(--placeholder-text); font-size: .9rem; letter-spacing: .05em; }
+.help-card-image-empty[hidden] { display: none; }
+.help-card-image-empty p { margin: 14px 0 0; }
+.help-card-steps { min-width: 0; min-height: 0; padding-right: 8px; overflow-y: auto; scrollbar-width: thin; }
+/* 直向一欄；column-count 由 client.js 的 fitHelpColumns() 在放不下時才加上去，
+   多欄時仍然是先填滿左邊那一欄再換下一欄，讀的順序不會亂掉。 */
+.help-card-list {
+  column-gap: 40px;
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--help-card-item-size);
+  line-height: 1.5;
+  list-style: none;
+  counter-reset: help-step;
+}
+.help-card-list li {
+  position: relative;
+  min-width: 0;
+  margin-bottom: 14px;
+  padding-left: 52px;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
+  counter-increment: help-step;
+}
+.help-card-list li:last-child { margin-bottom: 0; }
+.help-card-list li::before {
+  position: absolute;
+  top: .06em;
+  left: 0;
+  content: counter(help-step, decimal-leading-zero);
+  color: var(--helped-badge-text);
+  font-size: var(--help-card-index-size);
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+/* wizard 沒勾的動作：整條（含編號）淡成灰色，代表參與者要自己做。 */
+.help-card-list li.is-off,
+.help-card-list li.is-off::before { color: var(--help-card-off-text); }
+.help-card-empty { margin: 0; color: var(--muted); font-size: var(--help-card-item-size); }
+.help-card-empty[hidden] { display: none; }
+
+.help-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: baseline;
+  padding: clamp(14px, 2vh, 22px) clamp(24px, 3vw, 44px);
+  border-top: 1px solid var(--line);
+}
+/* 圖例自己就是範例：兩個詞用的正是清單上那兩種顏色。 */
+.help-card-legend { flex: 1 1 320px; margin: 0; color: var(--muted); font-size: var(--help-card-legend-size); font-weight: 600; line-height: 1.5; }
+.help-card-legend[hidden] { display: none; }
+.help-card-legend .legend-on { color: var(--ink); font-weight: 800; }
+.help-card-legend .legend-off { color: var(--help-card-off-text); font-weight: 800; }
+.help-card-cost-label { margin-left: auto; color: var(--muted); font-size: var(--help-card-cost-label-size); font-weight: 700; }
+.help-card-cost { color: var(--cost-text); font-size: var(--help-card-cost-size); line-height: 1; font-variant-numeric: tabular-nums; }
+.help-card-cost small { font-size: var(--help-card-cost-unit-size); font-weight: 650; }
+
+.offline-banner {
+  position: fixed;
+  bottom: 14px;
+  left: 50%;
+  /* 要在說明卡之上，斷線提示不能被蓋掉。 */
+  z-index: 30;
+  padding: 10px 20px;
+  color: var(--offline-ink);
+  border-radius: 99px;
+  background: var(--offline-bg);
+  box-shadow: 0 8px 24px var(--plate-shadow);
+  font-size: .95rem;
+  font-weight: 650;
+  transform: translateX(-50%);
+}
+.offline-banner[hidden] { display: none; }
+.offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); font-size: .95em; }
+
+@media (max-height: 760px) {
+  .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr); gap: 10px; padding: 10px 0; }
+  .stat-card { padding: 15px 22px; }
+  .stage-title .meal-label { font-size: 1.5rem; }
+  .stat-value { font-size: 1.8rem; }
+  .stat-card.accent .stat-label { font-size: 1.15rem; }
+  .stat-card.accent .stat-value { font-size: 1.8rem; }
+  .recipe-stage { padding: 15px 22px 18px; }
+  .action-card { min-height: 56px; }
+  .detail-panel { padding: 16px 20px; }
+  .meal-icon-wrap { height: var(--meal-icon-height-compact); }
+  :root {
+    --help-card-step-size: 1.2rem;
+    --help-card-title-size: 1.9rem;
+    --help-card-action-size: 1.3rem;
+    --help-card-item-size: 1.35rem;
+    --help-card-legend-size: 1rem;
+    --help-card-cost-label-size: 1.35rem;
+    --help-card-cost-size: 2.8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}

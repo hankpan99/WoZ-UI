@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f4" />
+    <title>實體實驗食譜</title>
+    <link rel="stylesheet" href="/client/client.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="stats" aria-label="料理進度">
+        <div class="fullscreen-card">
+          <button class="fullscreen-button" id="fullscreen-button" type="button">
+            <span class="fullscreen-icon" aria-hidden="true">⛶</span>
+            <span id="fullscreen-label">全螢幕</span>
+          </button>
+        </div>
+        <article class="stat-card step-card">
+          <span class="stage-title">
+            <span class="step-progress" id="current-step"></span>
+            <strong class="meal-label" id="top-meal"></strong>
+          </span>
+          <div class="meal-icon-wrap" id="meal-icon-wrap" hidden>
+            <img class="meal-icon" id="meal-icon" alt="" />
+          </div>
+        </article>
+        <article class="stat-card cost-card">
+          <span class="stat-label" id="step-cost-label">此步驟剩餘動作所需花費點數</span>
+          <strong class="stat-value" id="step-cost-value"><span id="step-cost">0</span><small> $</small></strong>
+          <span class="stat-label">剩餘所有動作需花費點數</span>
+          <strong class="stat-value"><span id="remaining-cost">0</span><small> $</small></strong>
+        </article>
+        <article class="stat-card accent">
+          <span class="stat-label">剩餘可指揮助手點數</span>
+          <strong class="stat-value"><span id="remaining-points">0</span><small> $</small></strong>
+          <span class="stat-label" id="remaining-proactive-label">剩餘主動幫助點數</span>
+          <strong class="stat-value" id="remaining-proactive-value"><span id="remaining-proactive">0</span><small> $</small></strong>
+        </article>
+      </section>
+
+      <section class="recipe-stage" aria-live="polite">
+        <div class="slide-layout">
+          <aside class="preview-panel" id="preview-panel">
+            <figure class="image-slot" id="image-slot">
+              <img id="step-image" alt="" hidden />
+              <div class="image-placeholder" id="image-placeholder" aria-hidden="true">
+                <div class="plate-art"><span></span></div>
+                <p>此處可放步驟圖片</p>
+              </div>
+            </figure>
+            <div class="detail-panel">
+              <!-- <h2>詳細動作</h2> -->
+              <div class="detail-scroll" id="detail-scroll">
+                <ol id="detail-list"></ol>
+              </div>
+            </div>
+          </aside>
+
+          <div class="action-column" id="action-column">
+            <div class="action-list" id="action-list"></div>
+            <button class="scroll-cue" id="scroll-cue" type="button" aria-label="捲動查看下方步驟">
+              <span aria-hidden="true">▼</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="preview-status" id="preview-status" role="status" aria-live="assertive" hidden>
+      <strong>預覽步驟中</strong>
+    </div>
+
+    <div class="help-overlay" id="help-overlay" role="dialog" aria-modal="true"
+         aria-labelledby="help-overlay-name" hidden>
+      <div class="help-card">
+        <header class="help-card-head">
+          <div class="help-card-title">
+            <h2 class="help-card-name" id="help-overlay-name"></h2>
+            <span class="help-card-step" id="help-overlay-step"></span>
+            <span class="help-card-answer" id="help-overlay-answer" hidden></span>
+          </div>
+          <p class="help-card-action" id="help-overlay-action"></p>
+        </header>
+        <div class="help-card-body">
+          <figure class="help-card-image">
+            <img id="help-overlay-image" alt="" hidden />
+            <div class="help-card-image-empty" id="help-overlay-image-empty">
+              <div class="plate-art"><span></span></div>
+              <p>此步驟沒有圖片</p>
+            </div>
+          </figure>
+          <div class="help-card-steps" id="help-overlay-body">
+            <ol class="help-card-list" id="help-overlay-list"></ol>
+            <p class="help-card-empty" id="help-overlay-empty" hidden>這個步驟沒有更細的動作。</p>
+          </div>
+        </div>
+        <footer class="help-card-foot">
+          <p class="help-card-legend" id="help-overlay-legend" hidden>
+            <span class="legend-on">黑色字體</span><span id="help-overlay-legend-text">動作將由助手介入</span>、<span class="legend-off">淺灰色字體</span>則由您獨立完成
+          </p>
+          <span class="help-card-cost-label" id="help-overlay-cost-label">本次花費</span>
+          <strong class="help-card-cost"><span id="help-overlay-cost">0</span><small> $</small></strong>
+        </footer>
+      </div>
+    </div>
+
+    <div class="offline-banner" id="offline-banner" role="status" hidden>
+      未連線到 server —— 請確認已執行 <code>python3 server/serve.py</code>
+    </div>
+
+    <script src="/data/recipe-data.js"></script>
+    <script src="/shared/format.js"></script>
+    <script src="/shared/images.js"></script>
+    <script src="/shared/store.js"></script>
+    <script src="/client/client.js"></script>
+  </body>
+</html>

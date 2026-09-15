@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f7f4" />
+    <title>WoZ 控制台</title>
+    <link rel="stylesheet" href="/wizard/wizard.css" />
+  </head>
+  <body>
+    <header class="wizard-top">
+      <div class="page-switcher">
+        <button class="page-arrow" id="page-prev" type="button" aria-label="上一頁">←</button>
+        <div class="page-toggle" id="page-toggle" role="group" aria-label="切換頁面"></div>
+        <button class="page-arrow" id="page-next" type="button" aria-label="下一頁">→</button>
+      </div>
+      <div class="page-meta">
+        <span class="page-meta-index" id="page-meta-index">第 1 頁</span>
+        <span class="page-meta-name" id="page-meta-name"></span>
+      </div>
+      <div class="conn" id="conn" data-status="connecting">
+        <span class="conn-dot" aria-hidden="true"></span>
+        <span id="conn-label">連線中…</span>
+      </div>
+    </header>
+
+    <main class="wizard-body">
+      <section class="panel steps-panel">
+        <div class="panel-head">
+          <h2>本頁步驟 <span class="panel-count" id="step-count">0 / 0</span></h2>
+          <div class="panel-actions">
+            <button class="ghost-button" id="view-prev" type="button">↑ 查看上一個</button>
+            <button class="ghost-button" id="view-next" type="button">↓ 查看下一個</button>
+            <button class="ghost-button" id="preview-all" type="button" title="在參與者畫面依序預覽本頁的所有步驟">▶ 預覽全部步驟</button>
+            <button class="ghost-button" id="mark-all" type="button">本頁全部完成</button>
+            <button class="ghost-button" id="clear-all" type="button">本頁全部取消</button>
+          </div>
+        </div>
+        <div class="client-view-status" id="client-view-status" hidden>
+          <span class="client-view-status-dot" aria-hidden="true"></span>
+          <span id="client-view-status-text"></span>
+          <button class="ghost-button" id="client-view-close" type="button">回到目前步驟</button>
+        </div>
+        <div class="overlay-status" id="overlay-status" hidden>
+          <span class="overlay-status-dot" aria-hidden="true"></span>
+          <span class="overlay-status-text" id="overlay-status-text"></span>
+          <button class="ghost-button" id="overlay-close" type="button">關閉說明卡</button>
+        </div>
+        <div class="step-list" id="step-list"></div>
+      </section>
+
+      <aside class="panel points-panel">
+        <div class="panel-head">
+          <h2>點數</h2>
+        </div>
+
+        <div class="points-readout">
+          <div class="points-box accent">
+            <span class="points-label">剩餘可指揮助手點數</span>
+            <strong class="points-value" id="remaining-points">—</strong>
+          </div>
+          <div class="points-box proactive">
+            <span class="points-label">剩餘主動幫助點數</span>
+            <strong class="points-value" id="remaining-proactive">—</strong>
+          </div>
+        </div>
+
+        <div class="sound-controls" aria-label="主動介入提示音">
+          <button class="ghost-button sound-toggle" id="sound-toggle" type="button" aria-pressed="true">🔔 主動提示音：開</button>
+          <select class="sound-select" id="sound-preset" aria-label="選擇主動介入音效">
+            <option value="ding">柔和單聲</option>
+            <option value="chime">雙音提示</option>
+            <option value="beep">短促嗶聲</option>
+          </select>
+          <button class="ghost-button" id="sound-preview" type="button">試聽</button>
+          <small>先在 Client 點「全螢幕」，音效才會從 Client 播放。</small>
+        </div>
+
+        <form class="adjust" id="adjust-form">
+          <label class="adjust-label" for="adjust-input">手動調整</label>
+          <input class="adjust-input" id="adjust-input" type="number" step="any" min="0" placeholder="點數" />
+          <button class="adjust-button add" id="adjust-add" type="button">＋ 加點</button>
+          <button class="adjust-button sub" id="adjust-sub" type="submit">－ 扣點</button>
+        </form>
+
+        <div class="ledger-head">
+          <h3>紀錄 <span class="panel-count" id="ledger-count">0 筆</span></h3>
+          <div class="ledger-actions">
+            <button class="ghost-button" id="export-button" type="button">⇩ 輸出紀錄</button>
+            <button class="ghost-button" id="undo-button" type="button" disabled>↩ 回溯最後操作</button>
+          </div>
+        </div>
+        <ol class="ledger" id="ledger"></ol>
+
+        <button class="danger-button" id="reset-button" type="button">重置全部</button>
+      </aside>
+    </main>
+
+    <div class="offline-banner" id="offline-banner" role="status" hidden>
+      未連線到 server —— 請確認已執行 <code>python3 server/serve.py</code>
+    </div>
+
+    <script src="/data/recipe-data.js"></script>
+    <script src="/shared/format.js"></script>
+    <script src="/shared/images.js"></script>
+    <script src="/shared/store.js"></script>
+    <script src="/wizard/wizard.js"></script>
+  </body>
+</html>
