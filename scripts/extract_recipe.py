@@ -2,7 +2,10 @@
 """Extract the recipe slide data from the source workbook without dependencies."""
 
 import json
+import argparse
 import re
+import shutil
+import datetime
 import unicodedata
 from collections import OrderedDict
 from pathlib import Path
@@ -19,7 +22,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 SOURCE = DATA_DIR / "User Study v3.xlsx"
 OUTPUT = DATA_DIR / "recipe-data.js"
-SHEET_NAME = "食譜excel v2"
+SHEET_NAME = "食譜excel v3"
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 # 「餐點」「階段」欄裡代表「沒有內容」的寫法（與前端 cleanLabel 一致）。
@@ -281,9 +284,73 @@ def print_proactive_summary(slides):
     print(f"合計：{len(rows)} 個步驟 / {format_cost(total)}")
 
 
+def migrate_step_images(old_slides, new_slides):
+    """Move numbered images by unique action name, keeping all originals in a backup."""
+    directory = ROOT / "images" / "steps"
+    if not directory.is_dir() or old_slides == new_slides:
+        return
+    old_actions = {
+        f"{int(slide['step'])}-{index + 1}": action['name']
+        for slide in old_slides for index, action in enumerate(slide['actions'])
+    }
+    old_occurrences = {}
+    for key, name in old_actions.items():
+        old_occurrences.setdefault(name, []).append(key)
+    destinations = {}
+    for slide in new_slides:
+        for index, action in enumerate(slide['actions']):
+            destinations.setdefault(action['name'], []).append(
+                f"{int(slide['step']):02d}-{index + 1:02d}"
+            )
+    files = [path for path in sorted(directory.iterdir())
+             if path.is_file() and re.fullmatch(r"\d+(?:[-_]\d+)?", path.stem)
+             and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}]
+    if not files:
+        return
+    backup = ROOT / "images" / f"steps-backup-{datetime.datetime.now():%Y%m%d-%H%M%S-%f}"
+    backup.mkdir()
+    # Finish copying the backup before changing any currently served image.
+    for path in files:
+        shutil.copy2(path, backup / path.name)
+    for path in files:
+        path.unlink()
+    mapped = 0
+    report = []
+    for path in files:
+        parts = re.split(r"[-_]", path.stem)
+        key = "-".join(str(int(part)) for part in parts)
+        name = old_actions.get(key)
+        targets = destinations.get(name, [])
+        # Repeated unchanged steps (e.g. cleanup) keep their order when both
+        # versions contain the same number of occurrences.
+        occurrences = old_occurrences.get(name, [])
+        if len(targets) == 1 or (targets and len(targets) == len(occurrences)):
+            target_index = 0 if len(targets) == 1 else occurrences.index(key)
+            target = directory / (targets[target_index] + path.suffix.lower())
+            shutil.copy2(backup / path.name, target)
+            mapped += 1
+            report.append(f"{path.name} -> {target.name}: {name}")
+        else:
+            report.append(f"未配對，保留在備份：{path.name}: {name or '整頁圖片或未知步驟'}")
+    (backup / "migration.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
+    print(f"圖片已配對 {mapped}/{len(files)}；原圖與對照表：{backup}")
+    for line in report:
+        if line.startswith("未配對"):
+            print(line)
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--migrate-images", action="store_true",
+                        help="根據現有 recipe-data.js 的步驟名稱搬移圖片，並保留原圖備份")
+    args = parser.parse_args()
     DATA_DIR.mkdir(exist_ok=True)
     slides, dropped = drop_unlabelled(extract())
+    if args.migrate_images and OUTPUT.exists():
+        previous = OUTPUT.read_text(encoding="utf-8")
+        old_slides = json.loads(re.sub(r"^.*?window\.RECIPE_SLIDES\s*=\s*", "", previous,
+                                      count=1, flags=re.S).strip().rstrip(";"))
+        migrate_step_images(old_slides, slides)
     for slide in dropped:
         names = "、".join(action["name"] for action in slide["actions"]) or "（沒有步驟）"
         print(f"略過原第 {slide['step']} 頁：餐點與階段都是「-」—— {names}")

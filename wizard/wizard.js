@@ -85,6 +85,7 @@ function buildPageToggle() {
       button.dataset.index = String(index);
       button.textContent = slide.step;
       button.title = pageLabel(slide) || `第 ${slide.step} 頁`;
+      button.setAttribute("aria-label", `第 ${slide.step} 頁：${pageLabel(slide)}`);
       button.addEventListener("click", () => dispatch({ type: "setPage", index }));
       return button;
     }),
@@ -106,6 +107,7 @@ function syncPageToggle(state) {
   const slide = slides[currentIndex];
   elements.pageMetaIndex.textContent = `第 ${slide?.step ?? "?"} 頁`;
   elements.pageMetaName.textContent = slide ? pageLabel(slide) : "";
+  elements.pageMetaName.title = slide ? pageLabel(slide) : "";
 }
 
 // ---- 步驟清單 ------------------------------------------------------------

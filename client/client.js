@@ -537,6 +537,8 @@ function showStageIcon(slide) {
     slide.step,
     [mealName, stageName].filter(Boolean).join("-"),
     stageName,
+    // 合併準備階段可沿用該餐點既有的食材圖示；新檔名優先。
+    ...(stageName === "拿用具、食材" ? [`${mealName}-拿食材`] : []),
   );
   const fallback = MEAL_ICONS.find(({ keyword }) => mealName.includes(keyword));
 
