@@ -373,8 +373,10 @@ def apply_action(state, action):
         )
         state.setdefault("helpModes", {})[key] = mode
         note = help_note(state, key) or f"步驟 {key} 接受幫助"
-        entry = _entry("help", -cost, note, key)
-        entry.update({"helpMode": mode, "selectedDetails": selected, "run": run})
+        entry = _entry("help", -cost, note, key,
+                       PROACTIVE_POOL if mode == "voice_reminder" else ASSIST_POOL)
+        entry.update({"helpMode": mode, "selectedDetails": selected, "run": run,
+                      "interventionType": "proactive" if mode == "voice_reminder" else "passive"})
         state["ledger"].append(entry)
         state["helped"][key] = cost
         state["helpOverlay"] = key
@@ -649,10 +651,11 @@ def export_payload(state):
             ),
             "modeCode": 2 if help_mode == "voice_reminder" else 1,
             "helpMode": help_mode,
+            "interventionType": "proactive" if help_mode == "voice_reminder" else "passive",
             "status": "accepted",
             "cost": cost,
             "timestamp": entry.get("ts"),
-            "pointChanges": [{"pool": "assist", "delta": -cost}],
+            "pointChanges": [{"pool": _pool_of(entry), "delta": -cost}],
             **_export_selection(key, selected),
         })
 
@@ -667,6 +670,7 @@ def export_payload(state):
         records.append({
             **location,
             "mode": "3. 主動",
+            "interventionType": "proactive",
             "modeCode": 3,
             "status": result.get("status"),
             "cost": cost,

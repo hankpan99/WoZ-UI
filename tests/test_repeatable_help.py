@@ -118,7 +118,9 @@ class RepeatableHelpTests(unittest.TestCase):
         self.assertEqual(state["ledger"][0]["helpMode"], "voice_reminder")
         self.assertIn("語音提醒建議", state["ledger"][0]["note"])
         self.assertEqual(state["ledger"][0]["selectedDetails"], [0, 1])
-        self.assertEqual(state["remaining"], state["totalPoints"] - 2)
+        self.assertEqual(state["remaining"], state["totalPoints"])
+        self.assertEqual(state["proactiveRemaining"], state["proactiveTotal"] - 2)
+        self.assertEqual(state["ledger"][0]["pool"], "proactive")
         self.assertIsNone(state["proactiveOverlay"])
 
         recipe_state.apply_action(state, {
@@ -128,6 +130,13 @@ class RepeatableHelpTests(unittest.TestCase):
         self.assertEqual([record["modeCode"] for record in records], [1, 2])
         self.assertEqual([record["helpMode"] for record in records], ["voice", "voice_reminder"])
         self.assertEqual([record["executionNumber"] for record in records], [2, 1])
+        self.assertEqual([record["interventionType"] for record in records], ["passive", "proactive"])
+        self.assertEqual([record["pointChanges"][0]["pool"] for record in records], ["assist", "proactive"])
+        recipe_state.apply_action(state, {"type": "undoLedger"})
+        self.assertEqual(state["remaining"], state["totalPoints"])
+        self.assertEqual(state["proactiveRemaining"], state["proactiveTotal"] - 2)
+        recipe_state.apply_action(state, {"type": "undoLedger"})
+        self.assertEqual(state["proactiveRemaining"], state["proactiveTotal"])
 
 
 if __name__ == "__main__":

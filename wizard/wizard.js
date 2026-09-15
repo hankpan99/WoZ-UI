@@ -187,18 +187,19 @@ function buildStepList() {
       costInput.addEventListener("input", () => manualCostKeys.add(key));
       manualCostKeys.delete(key);
 
-      const passiveModes = document.createElement("div");
-      passiveModes.className = "passive-mode-buttons";
+      const interventionModes = document.createElement("div");
+      interventionModes.className = "intervention-mode-buttons";
       [
-        ["physical", "1. 被動等待 - 實體"],
-        ["voice", "1. 被動等待 - 語音"],
+        ["physical", "1. 參與者指揮 - 實體"],
+        ["voice", "1. 參與者指揮 - 語音"],
         ["voice_reminder", "2. 語音提醒建議"],
       ].forEach(([mode, text]) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = `passive-mode-button ${mode}`;
+        button.className = `intervention-mode-button ${mode}`;
         button.dataset.role = "help-mode";
         button.dataset.mode = mode;
+        button.dataset.category = mode === "voice_reminder" ? "proactive" : "passive";
         button.textContent = text;
         if (mode === "voice_reminder") button.disabled = true;
         button.addEventListener("click", () => {
@@ -212,7 +213,7 @@ function buildStepList() {
             note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
           });
         });
-        passiveModes.append(button);
+        interventionModes.append(button);
       });
 
       // 說明卡是參與者畫面上那張整頁的框；勾「接受幫助」時會自動叫出來，
@@ -228,7 +229,7 @@ function buildStepList() {
       });
 
       helpRow.append(
-        passiveModes,
+        interventionModes,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
         costInput,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
@@ -542,6 +543,7 @@ function syncOverlayStatus(state) {
     : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
   // 關閉鈕要送對應的 action，記在 dataset 上讓 click handler 讀。
   elements.overlayStatus.dataset.mode = proactiveKey ? "proactive" : "assist";
+  elements.overlayStatus.dataset.category = proactiveKey || state.helpModes?.[key] === "voice_reminder" ? "proactive" : "passive";
   elements.overlayClose.textContent = proactiveKey ? "關閉提議卡" : "關閉說明卡";
   if (!key) return;
 
@@ -618,7 +620,7 @@ function buildLedgerRecords(state) {
       modeCode: helpMode === "voice_reminder" ? 2 : 1,
       status: entry.run ? `第 ${entry.run} 次執行` : "已介入",
       action: action.name, ts: entry.ts,
-      changes: [{ pool: "assist", delta: entry.delta }],
+      changes: [{ pool: entry.pool || "assist", delta: entry.delta }],
       selection: selectionSummary(action, selected),
     });
   });

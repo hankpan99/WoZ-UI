@@ -1,0 +1,66 @@
+:root {
+  /* 上方提示卡 / 下方語句高度比例；上方包含標頭、圖片與詳細步驟。 */
+  --actor-top-height: 60fr;
+  --actor-bottom-height: 40fr;
+  /* 介入大標題：預設跟隨 Client 提示卡（一般螢幕 2.5rem）。 */
+  --actor-title-size: var(--help-card-title-size);
+  /* 步驟名稱、語句、語句時機標籤的字級。 */
+  --actor-action-size: var(--help-card-action-size);
+  --actor-speech-size: clamp(1.5rem, 2.2vw, 2.2rem);
+  --actor-speech-label-size: clamp(1.4rem, 1.9vw, 1.8rem);
+  /* 模式 2 每欄最小寬度；調小可在同一排放更多欄。 */
+  --actor-reminder-column-width: 22rem;
+  --actor-detail-size: var(--help-card-item-size);
+}
+body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: var(--soft); }
+.actor-shell { height: 100%; display: grid; grid-template-rows: minmax(0, var(--actor-top-height)) minmax(0, var(--actor-bottom-height)); gap: 16px; }
+.actor-top, .actor-bottom { min-height: 0; border: 2px solid var(--helped-border); border-radius: 18px; background: var(--white); overflow: auto; }
+.actor-top { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border-radius: 26px; }
+.actor-top .help-card-name { font-size: var(--actor-title-size); }
+.actor-top .help-card-action { font-size: var(--actor-action-size); }
+#fullscreen-button { position: absolute; right: 12px; bottom: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, .88); backdrop-filter: blur(6px); color: var(--blue); box-shadow: 0 3px 8px rgba(34, 40, 30, .12); cursor: pointer; transition: background .15s, box-shadow .15s, transform .15s; }
+#fullscreen-button svg { width: 20px; height: 20px; flex-shrink: 0; }
+#fullscreen-button:hover { background: var(--blue); color: var(--white); border-color: var(--blue); box-shadow: 0 5px 12px rgba(34, 40, 30, .18); transform: translateY(-1px); }
+#fullscreen-button:active { transform: translateY(0); }
+#fullscreen-button:focus-visible { outline: 3px solid var(--helped-border); outline-offset: 3px; }
+.actor-speech { min-height: 0; overflow-y: auto; padding: 18px 24px; }
+.actor-bottom { display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.actor-top .help-card-body { grid-template-rows: minmax(0, 1fr); min-width: 0; }
+/* 圖片不參與容器的固有高度計算，始終完整縮放在提示卡範圍內。 */
+.actor-top .help-card-image { position: relative; align-self: stretch; height: auto; }
+.actor-top .help-card-image img { position: absolute; inset: 0; max-width: 100%; max-height: 100%; object-fit: contain; }
+.actor-top .help-card-image-empty { position: absolute; inset: 0; overflow: hidden; }
+.actor-top .help-card-image img[hidden] { display: none; }
+.actor-top .help-card-list { font-size: var(--actor-detail-size); }
+.actor-top .help-card-steps { padding-bottom: 44px; }
+.actor-speech { display: grid; align-items: safe center; }
+#speech-lines { display: grid; justify-items: center; min-width: 0; width: 100%; }
+.speech-flow { display: flex; align-items: center; gap: 28px; width: fit-content; max-width: 100%; }
+.flow-sequence { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; gap: 16px; min-width: 0; max-width: 100%; }
+.flow-branches { display: flex; flex: 0 1 auto; flex-direction: column; gap: 16px; min-width: 0; padding-left: 28px; border-left: 2px solid var(--line); }
+.flow-branch { position: relative; }
+.flow-branch::before { content: "→"; position: absolute; left: -27px; color: var(--helped-badge-text); font-size: 1.7rem; }
+.flow-arrow { flex-shrink: 0; color: var(--helped-badge-text); font-size: 1.8rem; }
+.speech-line { margin: 0; }
+.flow-card { flex: 0 1 auto; width: max-content; max-width: min(36rem, 100%); min-width: 0; padding: 18px 22px; border: 2px solid var(--helped-border); border-radius: 16px; background: var(--helped-bg); }
+.reminder-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--actor-reminder-column-width), 100%), 1fr)); gap: 18px; align-items: start; justify-items: center; width: 100%; }
+.reminder-flow .flow-card { max-width: 100%; }
+.actor-top .help-card-list li:not(.is-off), .reminder-flow dd { color: var(--ink); }
+.actor-top .help-card-list li.is-off, .actor-top .help-card-list li.is-off::before { color: var(--help-card-off-text); }
+.flow-card[data-branch="accepted"] { border-color: var(--reminder-border); background: var(--reminder-bg); }
+.flow-card[data-branch="declined"], .flow-card[data-branch="stop"] { border-color: var(--proactive-declined-text); background: var(--proactive-declined-bg); }
+.speech-line dt { display: inline-block; margin-bottom: 8px; padding: 6px 12px; border-radius: 8px; background: var(--helped-badge-text); color: var(--white); font-size: var(--actor-speech-label-size); font-weight: 800; line-height: 1.3; }
+.flow-card[data-branch="accepted"] dt { background: var(--reminder-text); }
+.flow-card[data-branch="declined"] dt, .flow-card[data-branch="stop"] dt { background: var(--proactive-declined-text); }
+.speech-line dd { margin: 4px 0 0; font-size: var(--actor-speech-size); font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+.speech-line.is-inactive { border-style: dashed; background: var(--panel-bg); }
+.speech-line.is-inactive dd { opacity: .65; }
+@media (max-width: 900px) {
+  .speech-flow { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .flow-branches { flex: auto; }
+  .flow-sequence { flex-wrap: wrap; }
+}
+#details-empty { color: var(--muted); }
+.actor-shell[data-level="2"] { --helped-border: var(--reminder-border); --helped-bg: var(--reminder-bg); --helped-badge-text: var(--reminder-text); }
+.actor-shell[data-level="3"] { --helped-border: var(--proactive-border); --helped-bg: var(--proactive-bg); --helped-badge-text: var(--proactive-text); }
+.actor-shell[data-level="4"] { --helped-border: var(--direct-border); --helped-bg: var(--direct-bg); --helped-badge-text: var(--direct-text); }

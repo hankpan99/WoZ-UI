@@ -559,7 +559,7 @@ function render() {
 
   updateCosts();
   updateRemainingPoints();
-  elements.currentStep.textContent = `步驟 ${slide.step}/${slides.length}`;
+  elements.currentStep.textContent = `階段 ${slide.step}/${slides.length}`;
 
   const mealName = cleanLabel(slide.meal);
   const stageName = cleanLabel(slide.stage);
@@ -604,7 +604,8 @@ function syncHelpOverlay(state) {
   lastProactiveOverlayKey = proactiveKey;
   hasReceivedOverlayState = true;
   const key = proactiveKey || state.helpOverlay || null;
-  const mode = proactiveKey ? "proactive" : "assist";
+  const isReminder = !proactiveKey && state.helpModes?.[key] === "voice_reminder";
+  const mode = proactiveKey || isReminder ? "proactive" : "assist";
   // 卡片指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
   const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
   const slide = slides[slideIndex];
@@ -614,9 +615,9 @@ function syncHelpOverlay(state) {
   elements.helpOverlay.hidden = !overlayKey;
   if (!overlayKey) return;
 
-  const isProactive = mode === "proactive";
+  const isProposal = Boolean(proactiveKey);
   elements.helpOverlay.dataset.mode = mode;
-  elements.helpOverlay.dataset.interventionLevel = isProactive
+  elements.helpOverlay.dataset.interventionLevel = isProposal
     ? (proactiveLevel(action).startsWith("4.") ? "4" : "3")
     : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
 
@@ -624,31 +625,26 @@ function syncHelpOverlay(state) {
   updateHelpCardWidth(details.length);
   // 主動提議的範圍來自 Excel，不看 helpDetails；兩種幫助各自獨立。
   const picked = new Set(
-    isProactive ? proactiveDetails(action) : pickedDetails(state, key, details.length),
+    isProposal ? proactiveDetails(action) : pickedDetails(state, key, details.length),
   );
 
-  // 「餐點 - 階段 - 步驟N」；Excel 沒填餐點的頁面就只有「階段 - 步驟N」。
-  elements.helpOverlayStep.textContent = [
-    cleanLabel(slide.meal),
-    cleanLabel(slide.stage),
-    `步驟${actionIndex + 1}`,
-  ].filter(Boolean).join(" - ");
-  const passiveMode = state.helpModes?.[key] || "physical";
-  const passiveTitles = {
-    physical: "實體介入（1. 被動等待）",
-    voice: "語音介入（1. 被動等待）",
-    voice_reminder: "語音介入（2. 語音提醒建議）",
+  elements.helpOverlayStep.textContent = `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`;
+  const interventionMode = state.helpModes?.[key] || "physical";
+  const interventionTitles = {
+    physical: "實體介入（1. 由您指揮Alex）",
+    voice: "語音介入（1. 由您指揮Alex）",
+    voice_reminder: "語音介入（2. Alex語音提醒建議）",
   };
-  const overlayTitle = isProactive
+  const overlayTitle = isProposal
     ? `實體介入（${proactiveLevel(action)}）`
-    : (passiveTitles[passiveMode] || passiveTitles.physical);
+    : (interventionTitles[interventionMode] || interventionTitles.physical);
   // 介入種類與觸發方式合併成單一標題；動作名稱獨立放在下一行。
   elements.helpOverlayName.textContent = overlayTitle;
   elements.helpOverlayAction.textContent = action.name;
   showHelpImage(slideIndex, actionIndex);
 
   // 提議被回答之後就把結果標在卡片上，wizard 收卡前參與者都看得到。
-  const answer = isProactive ? state.proactive?.[key]?.status : null;
+  const answer = isProposal ? state.proactive?.[key]?.status : null;
   elements.helpOverlayAnswer.hidden = !answer;
   if (answer) {
     elements.helpOverlayAnswer.textContent = answer === "accepted" ? "已接受" : "未接受";
@@ -668,13 +664,13 @@ function syncHelpOverlay(state) {
   elements.helpOverlayEmpty.hidden = details.length > 0;
   // 圖例只在真的有灰字時才出現；整步驟都由助手做的話沒什麼好對照的。
   elements.helpOverlayLegend.hidden = picked.size === details.length;
-  elements.helpOverlayLegendText.textContent = isProactive
+  elements.helpOverlayLegendText.textContent = isProposal
     ? "動作助手可以幫您完成"
     : "動作將由助手介入";
 
   // 還沒回答的提議寫「接受將花費」，其他情況都是已經確定的金額。
-  elements.helpOverlayCostLabel.textContent = isProactive && !answer ? "接受將花費" : "本次花費";
-  const cost = isProactive
+  elements.helpOverlayCostLabel.textContent = isProposal && !answer ? "接受將花費" : "本次花費";
+  const cost = isProposal
     ? (state.proactive?.[key]?.cost ?? proactiveCost(action))
     : state.helped?.[key];
   elements.helpOverlayCost.textContent = cost == null ? "—" : formatPoints(cost);
