@@ -449,6 +449,7 @@ function syncStepList(state) {
     const isShowing = overlayKey === key;
 
     row.querySelector('[data-role="done"]').checked = isDone;
+    row.querySelector(".done-check > span").textContent = isDone ? "✓ 已完成" : "完成";
     const helpMode = isHelped ? (helpModes[key] || "physical") : null;
     const selectedMode = intervention.mode(key);
     const executing = intervention.busy(key);

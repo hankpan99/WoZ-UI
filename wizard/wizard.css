@@ -27,6 +27,9 @@
   --proactive-border: #3f7cae;
   --proactive-bg: #eaf2f9;
   --proactive-text: #1f4f76;
+  /* Client 步驟預覽固定使用藍色，不跟著各介入模式換色。 */
+  --preview-border: #3f7cae;
+  --preview-text: #1f4f76;
   /* 主動按鈕寬度＝下方兩顆被動按鈕合計寬度。 */
   --intervention-controls-width: 300px;
   --done-bg: #f0f1ed;
@@ -239,8 +242,8 @@ h2, h3 { margin: 0; }
   transition: background .15s ease, border-color .15s ease;
 }
 .step-row.is-helped { border-color: var(--helped-border); background: var(--helped-bg); }
-.step-row.is-done { background: var(--done-bg); }
-.step-row.is-done.is-helped { background: var(--helped-bg); }
+.step-row.is-done { position: relative; }
+.step-row.is-done::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 6px; border-radius: 11px 0 0 11px; background: var(--done-button-checked); pointer-events: none; }
 .step-row.is-helped.is-help-reminder { border-color: var(--reminder-border); background: var(--reminder-bg); }
 .step-row[data-proactive-level="4"] { --proactive-border: var(--direct-border); --proactive-bg: var(--direct-bg); --proactive-text: var(--direct-text); }
 .step-row.is-done .step-name { color: var(--muted); text-decoration: line-through; }
@@ -262,14 +265,14 @@ h2, h3 { margin: 0; }
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.4;
-  color: var(--white);
+  color: var(--done-button);
   border: 1px solid var(--done-button);
   border-radius: 8px;
-  background: var(--done-button);
+  background: var(--white);
   transition: color .15s ease, background .15s ease;
 }
-.done-check:hover > span { background: var(--done-button-hover); }
-.done-check input:checked + span { border-color: var(--done-button-checked); background: var(--done-button-checked); }
+.done-check:hover > span { border-color: var(--done-button-hover); background: var(--panel-bg, #fafaf8); }
+.done-check input:checked + span { color: var(--white); border-color: var(--done-button-checked); background: var(--done-button-checked); }
 .done-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
 .proactive-check input { accent-color: var(--proactive-border); }
 
@@ -280,12 +283,12 @@ h2, h3 { margin: 0; }
 .step-image-mark { flex-shrink: 0; font-size: .82rem; cursor: help; }
 .step-list-price { padding: 3px 9px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: .8rem; font-weight: 700; white-space: nowrap; }
 
-.step-row.is-client-view { border-color: var(--proactive-border); box-shadow: inset 4px 0 0 var(--proactive-border); }
+.step-row.is-client-view { border-color: var(--preview-border); box-shadow: inset 4px 0 0 var(--preview-border); }
 .client-view-button {
   margin-left: auto;
   padding: 10px 16px;
-  color: var(--proactive-text);
-  border: 1px solid var(--proactive-border);
+  color: var(--preview-text);
+  border: 1px solid var(--preview-border);
   border-radius: 7px;
   background: var(--white);
   font-size: 1rem;
@@ -295,7 +298,7 @@ h2, h3 { margin: 0; }
   cursor: pointer;
 }
 .client-view-button:hover,
-.client-view-button.is-on { color: var(--white); background: var(--proactive-border); }
+.client-view-button.is-on { color: var(--white); background: var(--preview-border); }
 
 .help-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 34px; }
 .repeatable-hint { flex-basis: 100%; color: var(--muted); font-size: .76rem; }
@@ -431,7 +434,6 @@ h2, h3 { margin: 0; }
   box-shadow: inset 3px 0 0 var(--proactive-border), 0 0 0 2px var(--proactive-border);
 }
 /* 已完成／已介入的底色要壓過主動提議的底色，維持既有的優先順序。 */
-.step-row.is-done.is-proactive-accepted { background: var(--done-bg); }
 .step-row.is-helped.is-proactive-accepted { background: var(--helped-bg); }
 
 /* ===== 詳細步驟 ===== */
