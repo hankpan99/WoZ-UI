@@ -493,13 +493,6 @@ def apply_action(state, action):
             # 不論接受或不接受，答案送出後都立即收起 Client 的提議卡。
             _close_overlay_for(state, {key})
 
-    elif kind == "adjustPoints":
-        delta = _to_number(action.get("delta"))
-        if delta == 0:
-            return state, False
-        note = action.get("note") or ("手動加點" if delta > 0 else "手動扣點")
-        state["ledger"].append(_entry("manual", delta, note))
-
     elif kind == "undoLedger":
         if not state["ledger"]:
             return state, False

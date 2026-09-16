@@ -109,47 +109,52 @@ let proactiveAcceptedKeys = new Set();
 let proactiveDeclinedKeys = new Set();
 // 正在顯示說明卡的步驟（"slideIdx:actionIdx"），沒有就是 null。
 let overlayKey = null;
-let lastProactiveOverlayKey = null;
+let lastProactiveNotificationKey = null;
 let hasReceivedOverlayState = false;
-let lastSoundPreviewNonce = null;
 let audioContext = null;
+// 將提示音檔放在 client/audio/ding.mp3。
+const NOTIFICATION_SOUND_URL = "/client/audio/ding.mp3";
+let notificationSoundBuffer = null;
 
-// Client 的全螢幕點擊也是音效啟用手勢；Wizard 可在之後遠端控制開關與音色。
+function loadNotificationSound() {
+  if (!audioContext) return Promise.resolve(null);
+  notificationSoundBuffer ||= fetch(NOTIFICATION_SOUND_URL)
+    .then((response) => {
+      if (!response.ok) throw new Error(`提示音載入失敗：HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((data) => audioContext.decodeAudioData(data))
+    .catch((error) => {
+      notificationSoundBuffer = null;
+      console.warn("無法載入提示音，請確認 client/audio/ding.mp3 已放置", error);
+      return null;
+    });
+  return notificationSoundBuffer;
+}
+
+// Client 的全螢幕點擊也是音效啟用手勢；Wizard 可在之後遠端控制開關。
 function unlockAudio() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   try {
     audioContext ||= new AudioContextClass();
+    loadNotificationSound();
     audioContext.resume().catch((error) => console.warn("無法啟用主動介入提示音", error));
   } catch (error) {
     console.warn("無法啟用主動介入提示音", error);
   }
 }
 
-// 無額外音檔的三種短提示；試聽與主動介入共用同一套聲音。
-function playNotificationSound(preset) {
+// 主動介入播放 MP3；Client 必須先透過全螢幕點擊啟用音效。
+async function playNotificationSound() {
   if (audioContext?.state !== "running") return;
-  const notes = {
-    ding: [[784, 0, 0.28, "sine", 0.12]],
-    chime: [[660, 0, 0.20, "sine", 0.12], [880, 0.16, 0.20, "sine", 0.12]],
-    beep: [[740, 0, 0.14, "square", 0.055]],
-  }[preset] || [[660, 0, 0.20, "sine", 0.12], [880, 0.16, 0.20, "sine", 0.12]];
-  const start = audioContext.currentTime;
-  notes.forEach(([frequency, offset, duration, type, volume]) => {
-    const at = start + offset;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = type;
-    oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(volume, at + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(at);
-    oscillator.stop(at + duration + 0.01);
-    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-  });
+  const buffer = await loadNotificationSound();
+  if (!buffer || audioContext.state !== "running") return;
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioContext.destination);
+  source.onended = () => source.disconnect();
+  source.start();
 }
 
 // 兩個點數池各自獨立：可指揮助手＝參與者自己要求的幫助，
@@ -592,16 +597,27 @@ function updateHelpCardWidth(detailCount) {
   elements.helpCard.style.setProperty("--help-card-auto-width", `${width}px`);
 }
 
+function proactiveNotificationKey(state) {
+  if (state.proactiveOverlay) return `proposal:${state.proactiveOverlay}`;
+  const key = state.helpOverlay;
+  if (!key || state.helpModes?.[key] !== "voice_reminder") return null;
+  // 同一步驟連續執行模式 2 也要播放；使用本次帳目識別執行。
+  const entry = (state.ledger || []).findLast((item) => item.kind === "help" && item.key === key);
+  return `reminder:${key}:${entry?.id || entry?.run || ""}`;
+}
+
 // 整頁的卡片有兩種，共用同一塊 DOM（畫面上同時只會有一張，server 保證互斥）：
 //   assist    ＝ wizard 勾「接受幫助」時浮出來的說明卡，代勞範圍由控制台的勾選決定。
-//   proactive ＝ 助手主動提議卡，代勞範圍寫死在 Excel 的「介入」欄，參與者可以不接受。
+//   proactive ＝ 模式 2 語音提醒建議，以及模式 3、4 主動實體介入。
+// 模式 2 使用 Wizard 勾選範圍；模式 3、4 的範圍由 Excel 決定。
 // 兩種出現期間參與者都不能換頁（見 moveSlide），要先看完。
 function syncHelpOverlay(state) {
   // 主動提議卡優先：server 只會設其中一個，這裡的順序只是防呆。
   const proactiveKey = state.proactiveOverlay || null;
+  const notificationKey = proactiveNotificationKey(state);
   const newlyOpenedProactive = hasReceivedOverlayState
-    && proactiveKey && proactiveKey !== lastProactiveOverlayKey;
-  lastProactiveOverlayKey = proactiveKey;
+    && notificationKey && notificationKey !== lastProactiveNotificationKey;
+  lastProactiveNotificationKey = notificationKey;
   hasReceivedOverlayState = true;
   const key = proactiveKey || state.helpOverlay || null;
   const isReminder = !proactiveKey && state.helpModes?.[key] === "voice_reminder";
@@ -677,7 +693,7 @@ function syncHelpOverlay(state) {
 
   fitHelpColumns();
   if (newlyOpenedProactive && state.soundEnabled !== false) {
-    playNotificationSound(state.soundPreset);
+    playNotificationSound();
   }
 }
 
@@ -720,11 +736,6 @@ function applyState(state) {
   }
 
   syncHelpOverlay(state);
-  const soundPreviewNonce = state.soundPreviewNonce ?? 0;
-  if (lastSoundPreviewNonce !== null && soundPreviewNonce !== lastSoundPreviewNonce) {
-    playNotificationSound(state.soundPreset);
-  }
-  lastSoundPreviewNonce = soundPreviewNonce;
   if (previewStopped) stopPreview();
   if (previewRequested) previewAllSteps(previewNonce);
   if (!previewRequested) applyClientView();

@@ -80,21 +80,8 @@
 
         <div class="sound-controls" aria-label="主動介入提示音">
           <button class="ghost-button sound-toggle" id="sound-toggle" type="button" aria-pressed="true">🔔 主動提示音：開</button>
-          <select class="sound-select" id="sound-preset" aria-label="選擇主動介入音效">
-            <option value="ding">柔和單聲</option>
-            <option value="chime">雙音提示</option>
-            <option value="beep">短促嗶聲</option>
-          </select>
-          <button class="ghost-button" id="sound-preview" type="button">試聽</button>
           <small>先在 Client 點「全螢幕」，音效才會從 Client 播放。</small>
         </div>
-
-        <form class="adjust" id="adjust-form">
-          <label class="adjust-label" for="adjust-input">手動調整</label>
-          <input class="adjust-input" id="adjust-input" type="number" step="any" min="0" placeholder="點數" />
-          <button class="adjust-button add" id="adjust-add" type="button">＋ 加點</button>
-          <button class="adjust-button sub" id="adjust-sub" type="submit">－ 扣點</button>
-        </form>
 
         <div class="ledger-head">
           <h3>紀錄 <span class="panel-count" id="ledger-count">0 筆</span></h3>

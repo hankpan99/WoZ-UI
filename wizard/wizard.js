@@ -28,11 +28,6 @@ const elements = {
   remainingPoints: document.querySelector("#remaining-points"),
   remainingProactive: document.querySelector("#remaining-proactive"),
   soundToggle: document.querySelector("#sound-toggle"),
-  soundPreset: document.querySelector("#sound-preset"),
-  soundPreview: document.querySelector("#sound-preview"),
-  adjustForm: document.querySelector("#adjust-form"),
-  adjustInput: document.querySelector("#adjust-input"),
-  adjustAdd: document.querySelector("#adjust-add"),
   ledger: document.querySelector("#ledger"),
   ledgerCount: document.querySelector("#ledger-count"),
   exportButton: document.querySelector("#export-button"),
@@ -732,7 +727,6 @@ function applyState(state) {
   const soundEnabled = state.soundEnabled !== false;
   elements.soundToggle.textContent = soundEnabled ? "🔔 主動提示音：開" : "🔕 主動提示音：關";
   elements.soundToggle.setAttribute("aria-pressed", String(soundEnabled));
-  elements.soundPreset.value = state.soundPreset || "chime";
 
   const previewing = Boolean(state.previewActive);
   elements.previewAll.textContent = previewing ? "■ 停止預覽" : "▶ 預覽全部步驟";
@@ -790,12 +784,6 @@ elements.previewAll.addEventListener("click", () => dispatch({ type: "previewAll
 elements.soundToggle.addEventListener("click", () => {
   dispatch({ type: "setSoundEnabled", enabled: window.WozStore.state?.soundEnabled === false });
 });
-elements.soundPreset.addEventListener("change", () => {
-  dispatch({ type: "setSoundPreset", preset: elements.soundPreset.value });
-});
-elements.soundPreview.addEventListener("click", () => {
-  dispatch({ type: "previewSound", preset: elements.soundPreset.value });
-});
 elements.clientViewClose.addEventListener("click", () => {
   dispatch({ type: "setClientView", key: null });
 });
@@ -803,29 +791,6 @@ elements.viewPrev.addEventListener("click", () => moveClientView(-1));
 elements.viewNext.addEventListener("click", () => moveClientView(1));
 elements.markAll.addEventListener("click", () => setWholePage(true));
 elements.clearAll.addEventListener("click", () => setWholePage(false));
-
-function adjustPoints(sign) {
-  const amount = Number(elements.adjustInput.value);
-  if (!Number.isFinite(amount) || amount === 0) {
-    elements.adjustInput.focus();
-    return;
-  }
-  const delta = sign * Math.abs(amount);
-  dispatch({
-    type: "adjustPoints",
-    delta,
-    note: delta > 0 ? "手動加點" : "手動扣點",
-  });
-  elements.adjustInput.value = "";
-  elements.adjustInput.focus();
-}
-
-elements.adjustAdd.addEventListener("click", () => adjustPoints(1));
-// Enter 直接送出 = 扣點（實驗中扣點遠比加點常用）。
-elements.adjustForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  adjustPoints(-1);
-});
 
 elements.overlayClose.addEventListener("click", () => {
   if (elements.overlayStatus.dataset.mode === "error") {
