@@ -14,6 +14,17 @@
       name: "", step: "", answer: null, image: "", details: [], lines: [],
       message: speech.explanation?.[state.actorError] || state.actorError,
     };
+    if (Object.prototype.hasOwnProperty.call(state, "actorOverlay")) {
+      const overlay = state.actorOverlay;
+      if (!overlay) return null;
+      state = {
+        ...state,
+        proactiveOverlay: overlay.proactive ? overlay.key : null,
+        helpOverlay: overlay.proactive ? null : overlay.key,
+        helpModes: { ...state.helpModes, [overlay.key]: overlay.mode },
+        helpDetails: { ...state.helpDetails, [overlay.key]: overlay.details },
+      };
+    }
     const proactive = Boolean(state.proactiveOverlay);
     const key = state.proactiveOverlay || state.helpOverlay;
     if (!key) return null;

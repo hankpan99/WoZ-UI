@@ -13,6 +13,8 @@ const slides = [{ step: "1", meal: "蛋糕", stage: "製作", actions: [
 const initial = { currentIndex: 0, helpOverlay: null, proactiveOverlay: null, helpModes: {}, helpDetails: {}, proactive: {} };
 const view = (state, data = slides) => window.ActorModel.view(state, data, window.ACTOR_SPEECH);
 assert.equal(view(initial), null);
+assert.equal(view({ ...initial, actorOverlay: null, helpOverlay: "0:0" }), null);
+assert.equal(view({ ...initial, actorOverlay: { key: "0:0", proactive: false, mode: "voice_reminder", details: [1] } }).kind, "voice_reminder");
 for (const code of ["unrecognized", "prerequisite", "stage"]) {
   assert.equal(view({ ...initial, actorError: code }).message, window.ACTOR_SPEECH.explanation[code]);
 }

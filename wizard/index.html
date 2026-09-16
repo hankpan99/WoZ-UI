@@ -24,14 +24,34 @@
       </div>
     </header>
 
+    <section class="panel wizard-explanation-panel" aria-labelledby="wizard-explanation-title">
+        <div class="actor-error-controls" aria-label="Actor UI: 向參與者說明">
+          <h2 id="wizard-explanation-title">Actor UI: 向參與者說明</h2>
+          <button class="danger-button" type="button" data-actor-error="unrecognized"></button>
+          <button class="danger-button" type="button" data-actor-error="prerequisite"></button>
+          <button class="danger-button" type="button" data-actor-error="stage"></button>
+          <button class="danger-button" id="actor-custom-toggle" type="button" aria-expanded="false" aria-controls="actor-custom-form">顯示自訂文字</button>
+        </div>
+        <form id="actor-custom-form" hidden>
+          <label for="actor-custom-message">要向參與者說明的文字</label>
+          <textarea id="actor-custom-message" rows="3" required></textarea>
+          <button class="danger-button" type="submit">送出到 Actor</button>
+          <span id="actor-custom-status" role="status"></span>
+        </form>
+        <div class="overlay-status" id="actor-overlay-status" hidden>
+          <span class="overlay-status-dot" aria-hidden="true"></span>
+          <span class="overlay-status-text" id="actor-overlay-status-text"></span>
+          <button class="ghost-button" id="actor-overlay-close" type="button">關閉 Actor UI 顯示</button>
+        </div>
+    </section>
+
     <main class="wizard-body">
       <section class="panel steps-panel">
         <div class="panel-head">
           <h2>本頁步驟 <span class="panel-count" id="step-count">0 / 0</span></h2>
           <div class="panel-actions">
-            <button class="ghost-button" id="view-prev" type="button">↑ 查看上一個</button>
-            <button class="ghost-button" id="view-next" type="button">↓ 查看下一個</button>
-            <button class="ghost-button" id="preview-all" type="button" title="在參與者畫面依序預覽本頁的所有步驟">▶ 預覽全部步驟</button>
+            <button class="ghost-button" id="view-prev" type="button">↑ 預覽上個步驟</button>
+            <button class="ghost-button" id="view-next" type="button">↓ 預覽下個步驟</button>
             <button class="ghost-button" id="mark-all" type="button">本頁全部完成</button>
             <button class="ghost-button" id="clear-all" type="button">本頁全部取消</button>
           </div>
@@ -44,21 +64,8 @@
         <div class="overlay-status" id="overlay-status" hidden>
           <span class="overlay-status-dot" aria-hidden="true"></span>
           <span class="overlay-status-text" id="overlay-status-text"></span>
-          <button class="ghost-button" id="overlay-close" type="button">關閉說明卡</button>
+          <button class="ghost-button" id="overlay-close" type="button">關閉 Client UI 顯示</button>
         </div>
-        <div class="actor-error-controls" aria-label="向參與者說明">
-          <h3>向參與者說明</h3>
-          <button class="danger-button" type="button" data-actor-error="unrecognized"></button>
-          <button class="danger-button" type="button" data-actor-error="prerequisite"></button>
-          <button class="danger-button" type="button" data-actor-error="stage"></button>
-          <button class="danger-button" id="actor-custom-toggle" type="button" aria-expanded="false" aria-controls="actor-custom-form">顯示自訂文字</button>
-        </div>
-        <form id="actor-custom-form" hidden>
-          <label for="actor-custom-message">要向參與者說明的文字</label>
-          <textarea id="actor-custom-message" rows="3" required></textarea>
-          <button class="danger-button" type="submit">送出到 Actor</button>
-          <span id="actor-custom-status" role="status"></span>
-        </form>
         <div class="step-list" id="step-list"></div>
       </section>
 

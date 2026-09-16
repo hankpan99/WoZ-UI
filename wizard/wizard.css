@@ -50,7 +50,8 @@
 
 body {
   display: grid;
-  grid-template-rows: var(--top-height) minmax(0, 1fr);
+  grid-template-rows: var(--top-height) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
   gap: 12px;
   height: 100vh;
   margin: 0;
@@ -133,12 +134,11 @@ h2, h3 { margin: 0; }
 
 /* ===== 主體 ===== */
 
-.wizard-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
-  gap: 12px;
-  min-height: 0;
-}
+.wizard-top { grid-column: 1 / -1; grid-row: 1; }
+.wizard-body { display: contents; }
+.wizard-explanation-panel { grid-column: 1; grid-row: 2; }
+.steps-panel { grid-column: 1; grid-row: 3; }
+.points-panel { grid-column: 2; grid-row: 2 / 4; }
 
 .panel {
   display: grid;
@@ -181,13 +181,11 @@ h2, h3 { margin: 0; }
 /* ===== 步驟清單 ===== */
 
 /* panel-head ＋ Client 查看提示 ＋ 說明卡提示列 ＋ 清單。 */
-.steps-panel { grid-template-rows: auto auto auto auto auto minmax(0, 1fr); }
+.steps-panel { grid-template-rows: auto auto auto minmax(0, 1fr); }
 .steps-panel > .panel-head { grid-row: 1; }
 .steps-panel > .client-view-status { grid-row: 2; }
 .steps-panel > .overlay-status { grid-row: 3; }
-.steps-panel > .actor-error-controls { grid-row: 4; }
-.steps-panel > #actor-custom-form { grid-row: 5; }
-.steps-panel > .step-list { grid-row: 6; }
+.steps-panel > .step-list { grid-row: 4; }
 
 .client-view-status {
   display: flex;
@@ -260,7 +258,10 @@ h2, h3 { margin: 0; }
 }
 .done-check > span {
   display: block;
-  padding: 8px 12px;
+  padding: 10px 16px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
   color: var(--white);
   border: 1px solid var(--done-button);
   border-radius: 8px;
@@ -282,13 +283,14 @@ h2, h3 { margin: 0; }
 .step-row.is-client-view { border-color: var(--proactive-border); box-shadow: inset 4px 0 0 var(--proactive-border); }
 .client-view-button {
   margin-left: auto;
-  padding: 4px 9px;
+  padding: 10px 16px;
   color: var(--proactive-text);
   border: 1px solid var(--proactive-border);
   border-radius: 7px;
   background: var(--white);
-  font-size: .76rem;
+  font-size: 1rem;
   font-weight: 700;
+  line-height: 1.4;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -599,8 +601,8 @@ h2, h3 { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
-.actor-error-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); background: #fff1f1; }
-.actor-error-controls h3 { margin: 0; color: #9b2020; }
+.actor-error-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--white); }
+.actor-error-controls h2 { margin: 0; color: var(--ink); font-size: 1.1rem; }
 .actor-error-controls .danger-button { margin: 0; }
 .actor-error-controls .danger-button[aria-pressed="true"] { color: white; background: var(--minus); }
 .overlay-status[data-mode="error"] { background: #f9dada; color: #9b2020; border-bottom-color: #cf5b5b; }
@@ -611,3 +613,6 @@ h2, h3 { margin: 0; }
 #actor-custom-form .danger-button { justify-self: start; margin: 0; }
 #actor-custom-form[hidden] { display: none; }
 #actor-custom-message { display: block; box-sizing: border-box; width: 100%; min-height: 90px; margin: 0; padding: 10px; font: inherit; resize: vertical; }
+
+.wizard-explanation-panel { grid-template-rows: auto auto; max-height: 42dvh; overflow-y: auto; }
+.wizard-explanation-panel .actor-error-controls { border-bottom: 0; }

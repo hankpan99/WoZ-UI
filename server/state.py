@@ -127,6 +127,7 @@ def default_state():
         "helpDetails": {},
         # client 上正在顯示的整頁說明卡，或 None。
         "helpOverlay": None,
+        "actorOverlay": None,
         "actorError": None,  # Wizard 指定 Actor 顯示的錯誤語句。
         # 助手主動提議的結果。key -> {"status": "accepted"|"declined", "cost": n}
         "proactive": {},
@@ -143,10 +144,6 @@ def default_state():
         "proactiveTotal": PROACTIVE_TOTAL,
         "proactiveRemaining": PROACTIVE_TOTAL,
         "slideCount": SLIDE_COUNT,
-        # wizard 按「預覽全部步驟」時 +1；client 以目前頁面開始一輪本機預覽。
-        # nonce 讓連續按同一個指令也能被辨識，不把暫時的預覽狀態寫進實驗資料。
-        "previewNonce": 0,
-        "previewActive": False,
         # wizard 指定 client 暫時查看的步驟；None 代表跟隨最小的未完成步驟。
         "clientViewKey": None,
     }
@@ -312,6 +309,15 @@ def recalculate(state):
     return state
 
 
+def _show_actor_overlay(state, key, proactive=False):
+    state["actorError"] = None
+    state["actorOverlay"] = {
+        "key": key, "proactive": proactive,
+        "mode": state.get("helpModes", {}).get(key, "physical"),
+        "details": selected_details(state, key),
+    }
+
+
 def apply_action(state, action):
     """套用一個 action。回傳 (新狀態, 是否有變更)。state 會被就地修改。"""
     kind = action.get("type")
@@ -328,8 +334,13 @@ def apply_action(state, action):
             return state, False
         state["actorError"] = message
         if message:
-            state["helpOverlay"] = None
-            state["proactiveOverlay"] = None
+            state["actorOverlay"] = None
+
+    elif kind == "closeActorOverlay":
+        if not state.get("actorOverlay") and not state.get("actorError"):
+            return state, False
+        state["actorOverlay"] = None
+        state["actorError"] = None
 
     elif kind == "setPage":
         index = _clamp_index(action.get("index"))
@@ -337,11 +348,6 @@ def apply_action(state, action):
             return state, False
         state["currentIndex"] = index
         state["clientViewKey"] = None
-        # 切頁即中止舊頁的預覽，避免 client 繼續播放另一頁的 DOM。
-        if state.get("previewActive"):
-            state["previewActive"] = False
-            state["previewNonce"] = state.get("previewNonce", 0) + 1
-
     elif kind == "setDone":
         key = action.get("key")
         if not isinstance(key, str):
@@ -395,7 +401,7 @@ def apply_action(state, action):
                       "interventionType": "proactive" if mode == "voice_reminder" else "passive"})
         state["ledger"].append(entry)
         state["helped"][key] = cost
-        state["actorError"] = None
+        _show_actor_overlay(state, key)
         state["helpOverlay"] = key
         state["proactiveOverlay"] = None
 
@@ -433,9 +439,10 @@ def apply_action(state, action):
         # 只有已經扣過點的步驟才叫得出說明卡；None＝關掉。
         key = action.get("key")
         key = key if isinstance(key, str) and key in state["helped"] else None
-        if key == state["helpOverlay"] and not state.get("actorError"):
+        if key == state["helpOverlay"] and (not key or state.get("actorOverlay") and not state.get("actorError")):
             return state, False
-        state["actorError"] = None
+        if key:
+            _show_actor_overlay(state, key)
         state["helpOverlay"] = key
         # 兩張卡互斥：叫出說明卡就把主動提議卡收掉。
         if key:
@@ -445,9 +452,10 @@ def apply_action(state, action):
         # 只有 Excel 標過「介入」的步驟才有提議卡可以叫；None＝關掉。
         key = action.get("key")
         key = key if isinstance(key, str) and action_proactive(key) else None
-        if key == state["proactiveOverlay"] and not state.get("actorError"):
+        if key == state["proactiveOverlay"] and (not key or state.get("actorOverlay") and not state.get("actorError")):
             return state, False
-        state["actorError"] = None
+        if key:
+            _show_actor_overlay(state, key, proactive=True)
         state["proactiveOverlay"] = key
         if key:
             state["helpOverlay"] = None
@@ -512,34 +520,9 @@ def apply_action(state, action):
         key = action.get("key")
         if key is not None and (not isinstance(key, str) or _action_at(key) is None):
             return state, False
-        if key == state.get("clientViewKey") and not state.get("previewActive", False):
+        if key == state.get("clientViewKey"):
             return state, False
         state["clientViewKey"] = key
-        # 指定查看優先於自動預覽；若正在播放就同步停止。
-        if state.get("previewActive", False):
-            state["previewActive"] = False
-            state["previewNonce"] = state.get("previewNonce", 0) + 1
-
-    elif kind == "previewAll":
-        # 同一顆按鈕切換開始／停止；實際播放在 client 執行，不污染完成紀錄。
-        state["previewActive"] = not state.get("previewActive", False)
-        state["previewNonce"] = state.get("previewNonce", 0) + 1
-        if state["previewActive"]:
-            state["clientViewKey"] = None
-            # 預覽不能被既有的說明卡遮住。
-            state["helpOverlay"] = None
-            state["proactiveOverlay"] = None
-
-    elif kind == "finishPreview":
-        # client 自然播完時收掉模式。nonce 防止舊計時器關掉較新的預覽。
-        if (
-            not state.get("previewActive", False)
-            or action.get("nonce") != state.get("previewNonce", 0)
-        ):
-            return state, False
-        state["previewActive"] = False
-        state["previewNonce"] = state.get("previewNonce", 0) + 1
-
     elif kind == "setSoundEnabled":
         enabled = action.get("enabled")
         if not isinstance(enabled, bool) or enabled == state.get("soundEnabled", True):

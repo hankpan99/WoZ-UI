@@ -19,7 +19,6 @@ const elements = {
   stepCount: document.querySelector("#step-count"),
   viewPrev: document.querySelector("#view-prev"),
   viewNext: document.querySelector("#view-next"),
-  previewAll: document.querySelector("#preview-all"),
   clientViewStatus: document.querySelector("#client-view-status"),
   clientViewStatusText: document.querySelector("#client-view-status-text"),
   clientViewClose: document.querySelector("#client-view-close"),
@@ -163,9 +162,9 @@ function buildStepList() {
       clientViewButton.type = "button";
       clientViewButton.className = "client-view-button";
       clientViewButton.dataset.role = "client-view";
-      clientViewButton.textContent = "在 Client 顯示";
+      clientViewButton.textContent = "預覽此步驟";
       clientViewButton.addEventListener("click", () => {
-        dispatch({ type: "setClientView", key });
+        dispatch({ type: "setClientView", key: window.WozStore.state?.clientViewKey === key ? null : key });
       });
       title.insertBefore(clientViewButton, title.querySelector(".step-list-price"));
 
@@ -487,7 +486,8 @@ function syncStepList(state) {
     row.classList.toggle("is-client-view", isClientView);
     const clientViewButton = row.querySelector('[data-role="client-view"]');
     clientViewButton.classList.toggle("is-on", isClientView);
-    clientViewButton.textContent = isClientView ? "Client 查看中" : "在 Client 顯示";
+    clientViewButton.setAttribute("aria-pressed", String(isClientView));
+    clientViewButton.title = isClientView ? "取消預覽此步驟，回到當前步驟" : "預覽此步驟";
 
     syncProactiveRow(row, key, action, proactive[key], proactiveOverlayKey === key);
   });
@@ -530,14 +530,21 @@ function syncOverlayStatus(state) {
   document.querySelectorAll("[data-actor-error]").forEach((button) => {
     button.setAttribute("aria-pressed", String(state.actorError === button.dataset.actorError));
   });
+  const actorStatus = document.querySelector("#actor-overlay-status");
+  actorStatus.hidden = !state.actorError && !state.actorOverlay;
+  const actorOverlay = state.actorOverlay;
+  actorStatus.dataset.mode = state.actorError ? "error" : actorOverlay?.proactive ? "proactive" : "assist";
   if (state.actorError) {
-    elements.overlayStatus.hidden = false;
-    elements.overlayStatus.dataset.mode = "error";
-    elements.overlayStatus.dataset.interventionLevel = "error";
-    elements.overlayStatus.dataset.category = "error";
-    elements.overlayStatusText.textContent = `向參與者說明：${window.ACTOR_SPEECH.explanation[state.actorError] || state.actorError}`;
-    elements.overlayClose.textContent = "關閉說明頁面";
-    return;
+    delete actorStatus.dataset.interventionLevel;
+    document.querySelector("#actor-overlay-status-text").textContent =
+      `Actor UI 顯示中（向參與者說明）：${window.ACTOR_SPEECH.explanation[state.actorError] || state.actorError}`;
+  } else if (actorOverlay) {
+    const [page, step] = actorOverlay.key.split(":").map(Number);
+    document.querySelector("#actor-overlay-status-text").textContent =
+      `Actor UI 顯示中（${actorOverlay.proactive ? "主動提議卡" : "說明卡"}）：第${slides[page]?.step}頁 · 步驟${stepLabel(step)}　${slides[page]?.actions[step]?.name || ""}`;
+    actorStatus.dataset.interventionLevel = actorOverlay.proactive
+      ? (proactiveLevel(slides[page]?.actions[step]).startsWith("4.") ? "4" : "3")
+      : actorOverlay.mode === "voice_reminder" ? "2" : "1";
   }
   // 兩種卡共用這條提示；server 保證同時只有一張。
   const proactiveKey = state.proactiveOverlay || null;
@@ -551,14 +558,14 @@ function syncOverlayStatus(state) {
   // 關閉鈕要送對應的 action，記在 dataset 上讓 click handler 讀。
   elements.overlayStatus.dataset.mode = proactiveKey ? "proactive" : "assist";
   elements.overlayStatus.dataset.category = proactiveKey || state.helpModes?.[key] === "voice_reminder" ? "proactive" : "passive";
-  elements.overlayClose.textContent = proactiveKey ? "關閉提議卡" : "關閉說明卡";
+  elements.overlayClose.textContent = "關閉 Client UI 顯示";
   if (!key) return;
 
   const slide = slides[slideIndex];
   const name = slide?.actions[actionIndex]?.name || "";
   const kind = proactiveKey ? "主動提議卡" : "說明卡";
   elements.overlayStatusText.textContent =
-    `參與者畫面顯示中（${kind}）：第${slide?.step ?? "?"}頁 · 步驟${stepLabel(actionIndex)}　${name}`;
+    `Client UI 顯示中（${kind}）：第${slide?.step ?? "?"}頁 · 步驟${stepLabel(actionIndex)}　${name}`;
 }
 
 function syncClientViewStatus(state) {
@@ -728,11 +735,6 @@ function applyState(state) {
   elements.soundToggle.textContent = soundEnabled ? "🔔 主動提示音：開" : "🔕 主動提示音：關";
   elements.soundToggle.setAttribute("aria-pressed", String(soundEnabled));
 
-  const previewing = Boolean(state.previewActive);
-  elements.previewAll.textContent = previewing ? "■ 停止預覽" : "▶ 預覽全部步驟";
-  elements.previewAll.classList.toggle("is-on", previewing);
-  elements.previewAll.setAttribute("aria-pressed", String(previewing));
-
   if (currentIndex !== renderedIndex) {
     buildStepList();
     renderedIndex = currentIndex;
@@ -780,7 +782,6 @@ function setWholePage(value) {
   dispatch({ type: "setDoneBulk", keys, value });
 }
 
-elements.previewAll.addEventListener("click", () => dispatch({ type: "previewAll" }));
 elements.soundToggle.addEventListener("click", () => {
   dispatch({ type: "setSoundEnabled", enabled: window.WozStore.state?.soundEnabled === false });
 });
@@ -793,10 +794,6 @@ elements.markAll.addEventListener("click", () => setWholePage(true));
 elements.clearAll.addEventListener("click", () => setWholePage(false));
 
 elements.overlayClose.addEventListener("click", () => {
-  if (elements.overlayStatus.dataset.mode === "error") {
-    dispatch({ type: "setActorError", message: null });
-    return;
-  }
   const proactive = elements.overlayStatus.dataset.mode === "proactive";
   dispatch({ type: proactive ? "setProactiveOverlay" : "setHelpOverlay", key: null });
 });
@@ -860,3 +857,5 @@ document.querySelector("#actor-custom-form").addEventListener("submit", async (e
   const result = await dispatch({ type: "setActorError", message });
   status.textContent = result ? "已送出到 Actor" : "傳送失敗，請確認連線後重試。";
 });
+
+document.querySelector("#actor-overlay-close").addEventListener("click", () => dispatch({ type: "closeActorOverlay" }));

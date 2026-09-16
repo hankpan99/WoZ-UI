@@ -20,8 +20,6 @@ const SHOW_STEP_COST = false;
 const SHOW_PROACTIVE_POINTS = true;
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
-// 「預覽全部步驟」每個步驟停留的毫秒數；2000 ＝ 2 秒。
-const PREVIEW_STEP_MS = 2000;
 // 右側主步驟：單欄放不下時最多改成兩欄。每欄至少保留這個寬度，
 // 避免在較窄的視窗裡硬切兩欄，反而讓文字大量換行。
 const MAX_ACTION_COLUMNS = 2;
@@ -68,7 +66,6 @@ const elements = {
   imagePlaceholder: document.querySelector("#image-placeholder"),
   fullscreenButton: document.querySelector("#fullscreen-button"),
   fullscreenLabel: document.querySelector("#fullscreen-label"),
-  previewStatus: document.querySelector("#preview-status"),
   helpOverlay: document.querySelector("#help-overlay"),
   helpCard: document.querySelector("#help-overlay .help-card"),
   helpOverlayBody: document.querySelector("#help-overlay-body"),
@@ -92,11 +89,6 @@ let currentIndex = 0;
 let renderedIndex = -1;
 // 上一次自動捲動時對準的步驟，避免只是點數變動也把畫面拉走。
 let scrolledStepIndex = -1;
-// 上一次看到的 previewNonce；變動時從本頁第一個動作開始預覽。
-let lastPreviewNonce = null;
-let previewRunId = 0;
-let isPreviewing = false;
-let previewSeenCount = 0;
 // Wizard 指定暫時查看的步驟；null 時跟隨最小的未完成步驟。
 let clientViewKey = null;
 // 目前預覽中的步驟（滑鼠移入的那個，或現在該做的那一步）。
@@ -412,7 +404,7 @@ function renderActions(slide) {
     button.tabIndex = -1;
     button.className = "action-card";
     button.addEventListener("mouseenter", () => {
-      if (!isPreviewing && !clientViewKey) showStep(index);
+      if (!clientViewKey) showStep(index);
     });
     button.classList.toggle("done", doneKeys.has(key));
     button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
@@ -459,21 +451,6 @@ function syncActionStates() {
   updateCosts();
   highlightCurrentStep();
   autoScroll(false);
-  if (isPreviewing) applyPreviewStep(previewSeenCount);
-}
-
-function wait(milliseconds) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-function applyPreviewStep(actionIndex) {
-  [...elements.actionList.children].forEach((button, index) => {
-    button.classList.remove("client-view");
-    button.classList.toggle("preview-seen", index < actionIndex);
-    button.classList.toggle("active", index === actionIndex);
-  });
-  showStep(actionIndex);
-  requestAnimationFrame(() => scrollToPreviewStep(actionIndex));
 }
 
 function applyClientView() {
@@ -489,48 +466,10 @@ function applyClientView() {
     button.classList.toggle("client-view", valid && index === actionIndex);
     if (valid) button.classList.remove("active");
   });
-  if (!valid || isPreviewing) return;
+  if (!valid) return;
 
   showStep(actionIndex);
   requestAnimationFrame(() => scrollToPreviewStep(actionIndex));
-}
-
-function restoreAfterPreview() {
-  isPreviewing = false;
-  previewSeenCount = 0;
-  elements.previewStatus.hidden = true;
-  [...elements.actionList.children].forEach((button) => button.classList.remove("preview-seen"));
-  highlightCurrentStep();
-  autoScroll(true);
-  applyClientView();
-}
-
-function stopPreview() {
-  previewRunId += 1;
-  if (isPreviewing) restoreAfterPreview();
-}
-
-async function previewAllSteps(nonce) {
-  const actions = slides[currentIndex]?.actions || [];
-  if (!actions.length) return;
-
-  // 新指令會使上一輪自然失效，因此重按按鈕可以直接從頭開始。
-  const runId = ++previewRunId;
-  isPreviewing = true;
-  previewSeenCount = 0;
-  elements.previewStatus.hidden = false;
-
-  for (let index = 0; index < actions.length; index += 1) {
-    if (runId !== previewRunId) return;
-    previewSeenCount = index;
-    applyPreviewStep(index);
-    await wait(PREVIEW_STEP_MS);
-  }
-
-  if (runId !== previewRunId) return;
-  // 最後一步停滿設定時間後結束，畫面回到正式的完成狀態與目前步驟。
-  restoreAfterPreview();
-  window.WozStore.dispatch({ type: "finishPreview", nonce });
 }
 
 // 這一頁的階段圖示。檔名依序試「頁碼」→「餐點-階段」→「階段」，
@@ -714,19 +653,7 @@ function applyState(state) {
   clientViewKey = state.clientViewKey || null;
   const clientViewEnded = Boolean(previousClientViewKey) && !clientViewKey;
 
-  const previewNonce = state.previewNonce ?? 0;
-  const previewChanged = lastPreviewNonce !== null && previewNonce !== lastPreviewNonce;
-  const previewRequested = Boolean(state.previewActive)
-    && (lastPreviewNonce === null || previewChanged);
-  const previewStopped = !state.previewActive && previewChanged;
-  lastPreviewNonce = previewNonce;
-
   const nextIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
-  // wizard 若在播放途中切頁，就結束舊頁預覽，避免舊計時器操作新頁的 DOM。
-  if (isPreviewing && nextIndex !== currentIndex) {
-    previewRunId += 1;
-    restoreAfterPreview();
-  }
   currentIndex = nextIndex;
 
   if (currentIndex !== renderedIndex) {
@@ -736,16 +663,14 @@ function applyState(state) {
   }
 
   syncHelpOverlay(state);
-  if (previewStopped) stopPreview();
-  if (previewRequested) previewAllSteps(previewNonce);
-  if (!previewRequested) applyClientView();
+  applyClientView();
   // 「回到目前步驟」即使目標沒變，也要把參與者手動捲走的列表重新定位。
-  if (clientViewEnded && !state.previewActive) autoScroll(true);
+  if (clientViewEnded) autoScroll(true);
 }
 
 function moveSlide(direction) {
   // 說明卡蓋著的時候不能用方向鍵換頁，要先看完再說。
-  if (overlayKey || isPreviewing) return;
+  if (overlayKey) return;
   const nextIndex = Math.max(0, Math.min(slides.length - 1, currentIndex + direction));
   if (nextIndex === currentIndex) return;
   // 換頁一樣寫回 server，wizard 的頁面切換器才會跟著動。
@@ -754,7 +679,7 @@ function moveSlide(direction) {
 
 // 滑鼠離開整個列表就切回現在該做的那一步。
 elements.actionList.addEventListener("mouseleave", () => {
-  if (!isPreviewing && !clientViewKey) showStep(pinnedIndex());
+  if (!clientViewKey) showStep(pinnedIndex());
 });
 // 圖片壞掉（檔名對但檔案有問題）時退回預留版位，不要留一個破圖。
 elements.stepImage.addEventListener("error", () => {
