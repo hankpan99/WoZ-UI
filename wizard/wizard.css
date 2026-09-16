@@ -181,7 +181,13 @@ h2, h3 { margin: 0; }
 /* ===== 步驟清單 ===== */
 
 /* panel-head ＋ Client 查看提示 ＋ 說明卡提示列 ＋ 清單。 */
-.steps-panel { grid-template-rows: auto auto auto minmax(0, 1fr); }
+.steps-panel { grid-template-rows: auto auto auto auto auto minmax(0, 1fr); }
+.steps-panel > .panel-head { grid-row: 1; }
+.steps-panel > .client-view-status { grid-row: 2; }
+.steps-panel > .overlay-status { grid-row: 3; }
+.steps-panel > .actor-error-controls { grid-row: 4; }
+.steps-panel > #actor-custom-form { grid-row: 5; }
+.steps-panel > .step-list { grid-row: 6; }
 
 .client-view-status {
   display: flex;
@@ -315,13 +321,13 @@ h2, h3 { margin: 0; }
 }
 .intervention-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-.passive-mode-buttons {
+.intervention-mode-buttons {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 0 0 var(--intervention-controls-width);
   gap: 6px;
 }
-.passive-mode-button {
+.intervention-mode-button {
   padding: 7px 11px;
   border: 1px solid;
   border-radius: 8px;
@@ -332,17 +338,17 @@ h2, h3 { margin: 0; }
   transition: color .15s ease, background .15s ease;
 }
 /* 實體＝琥珀色。 */
-.passive-mode-button.physical { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
-.passive-mode-button.physical:hover,
-.passive-mode-button.physical.is-on { color: var(--white); background: var(--helped-border); }
+.intervention-mode-button.physical { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.intervention-mode-button.physical:hover,
+.intervention-mode-button.physical.is-on { color: var(--white); background: var(--helped-border); }
 /* 等級 1 的實體與語音都維持橘色。 */
-.passive-mode-button.voice { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
-.passive-mode-button.voice:hover,
-.passive-mode-button.voice.is-on { color: var(--white); background: var(--helped-border); }
-.passive-mode-button.voice_reminder { grid-column: 1 / -1; color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
-.passive-mode-button.voice_reminder:hover { color: var(--white); background: var(--reminder-border); }
-.passive-mode-button:disabled { opacity: .4; cursor: not-allowed; }
-.passive-mode-button.voice_reminder:disabled:hover { color: var(--reminder-text); background: var(--reminder-bg); }
+.intervention-mode-button.voice { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.intervention-mode-button.voice:hover,
+.intervention-mode-button.voice.is-on { color: var(--white); background: var(--helped-border); }
+.intervention-mode-button.voice_reminder { grid-column: 1 / -1; color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
+.intervention-mode-button.voice_reminder:hover { color: var(--white); background: var(--reminder-border); }
+.intervention-mode-button:disabled { opacity: .4; cursor: not-allowed; }
+.intervention-mode-button.voice_reminder:disabled:hover { color: var(--reminder-text); background: var(--reminder-bg); }
 .cost-caption { color: var(--muted); font-size: .85rem; font-weight: 600; }
 .cost-input {
   width: 70px;
@@ -601,3 +607,15 @@ h2, h3 { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
+.actor-error-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); background: #fff1f1; }
+.actor-error-controls h3 { margin: 0; color: #9b2020; }
+.actor-error-controls .danger-button { margin: 0; }
+.actor-error-controls .danger-button[aria-pressed="true"] { color: white; background: var(--minus); }
+.overlay-status[data-mode="error"] { background: #f9dada; color: #9b2020; border-bottom-color: #cf5b5b; }
+.overlay-status[data-mode="error"] .overlay-status-dot { background: #cf5b5b; }
+
+#actor-custom-toggle { margin: 0 0 0 28px; }
+#actor-custom-form { display: grid; gap: 10px; min-height: 0; max-height: 40vh; overflow-y: auto; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+#actor-custom-form .danger-button { justify-self: start; margin: 0; }
+#actor-custom-form[hidden] { display: none; }
+#actor-custom-message { display: block; box-sizing: border-box; width: 100%; min-height: 90px; margin: 0; padding: 10px; font: inherit; resize: vertical; }

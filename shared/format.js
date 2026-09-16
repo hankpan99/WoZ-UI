@@ -52,7 +52,7 @@
 
   // 舊版食譜沒有主動程度欄位時，維持原本的詢問後介入。
   const proactiveLevel = (action) =>
-    action?.proactiveLevel === "4. 直接" ? "4. 直接" : "3. 詢問後";
+    action?.proactiveLevel === "4. 直接" ? "4. Alex直接介入" : "3. Alex詢問後介入";
 
   // 整個步驟都標記＝原價；只標幾條＝標到的條數。沒有標記就是 0。
   const proactiveCost = (action) => {

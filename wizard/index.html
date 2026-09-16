@@ -46,6 +46,19 @@
           <span class="overlay-status-text" id="overlay-status-text"></span>
           <button class="ghost-button" id="overlay-close" type="button">關閉說明卡</button>
         </div>
+        <div class="actor-error-controls" aria-label="向參與者說明">
+          <h3>向參與者說明</h3>
+          <button class="danger-button" type="button" data-actor-error="unrecognized"></button>
+          <button class="danger-button" type="button" data-actor-error="prerequisite"></button>
+          <button class="danger-button" type="button" data-actor-error="stage"></button>
+          <button class="danger-button" id="actor-custom-toggle" type="button" aria-expanded="false" aria-controls="actor-custom-form">顯示自訂文字</button>
+        </div>
+        <form id="actor-custom-form" hidden>
+          <label for="actor-custom-message">要向參與者說明的文字</label>
+          <textarea id="actor-custom-message" rows="3" required></textarea>
+          <button class="danger-button" type="submit">送出到 Actor</button>
+          <span id="actor-custom-status" role="status"></span>
+        </form>
         <div class="step-list" id="step-list"></div>
       </section>
 
@@ -104,6 +117,7 @@
     <script src="/shared/format.js"></script>
     <script src="/shared/images.js"></script>
     <script src="/shared/store.js"></script>
+    <script src="/actor/speech.js"></script>
     <script src="/wizard/wizard.js"></script>
   </body>
 </html>

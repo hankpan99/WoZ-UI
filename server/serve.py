@@ -259,6 +259,7 @@ def main():
     print(f"  區網      http://{local_ip()}:{args.port}")
     print(f"  參與者    http://localhost:{args.port}/client/")
     print(f"  Wizard    http://localhost:{args.port}/wizard/")
+    print(f"  Actor     http://localhost:{args.port}/actor/")
     print(f"  食譜頁數  {woz_state.SLIDE_COUNT}")
     print(f"  紀錄檔    {log_path.relative_to(PROJECT_ROOT)}")
     print("按 Ctrl-C 結束。")

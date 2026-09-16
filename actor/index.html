@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Actor 助手畫面</title>
+    <link rel="stylesheet" href="/client/client.css" />
+    <link rel="stylesheet" href="/actor/actor.css" />
+  </head>
+  <body>
+    <main class="actor-shell is-idle">
+      <section class="actor-top" aria-label="介入與詳細步驟">
+        <header class="help-card-head">
+          <div class="help-card-title">
+            <h1 class="help-card-name" id="intervention-title">等待介入指令</h1>
+            <span class="help-card-step" id="step-label"></span>
+            <span class="help-card-answer" id="answer" hidden></span>
+          </div>
+          <p class="help-card-action" id="action-name" hidden></p>
+        </header>
+        <div class="help-card-body">
+          <figure class="help-card-image">
+            <img id="step-image" alt="" hidden />
+            <div class="help-card-image-empty" id="image-empty">
+              <div class="plate-art"><span></span></div>
+              <p>此步驟沒有圖片</p>
+            </div>
+          </figure>
+          <div class="help-card-steps" id="detail-scroll">
+            <ol class="help-card-list" id="detail-list"></ol>
+            <p class="help-card-empty" id="details-empty" hidden>這個步驟沒有更細的動作。</p>
+          </div>
+        </div>
+          <button id="fullscreen-button" type="button" aria-pressed="false" aria-label="全螢幕" title="全螢幕">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" /></svg>
+          </button>
+      </section>
+      <section class="actor-bottom" aria-label="要說的語句">
+        <div class="actor-speech" aria-live="polite">
+          <p id="speech-empty">X</p>
+          <div id="speech-lines" aria-label="助手語句流程"></div>
+        </div>
+      </section>
+    </main>
+    <div class="offline-banner" id="offline-banner" role="status" hidden>未連線到 server，請確認伺服器已啟動。</div>
+    <script src="/data/recipe-data.js"></script>
+    <script src="/shared/format.js"></script>
+    <script src="/shared/images.js"></script>
+    <script src="/actor/speech.js"></script>
+    <script src="/actor/model.js"></script>
+    <script src="/shared/store.js"></script>
+    <script src="/actor/actor.js"></script>
+  </body>
+</html>
