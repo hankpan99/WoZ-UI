@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/actor/actor.css" />
   </head>
   <body>
-    <main class="actor-shell">
+    <main class="actor-shell is-idle">
       <section class="actor-top" aria-label="介入與詳細步驟">
         <header class="help-card-head">
           <div class="help-card-title">
@@ -16,7 +16,7 @@
             <span class="help-card-step" id="step-label"></span>
             <span class="help-card-answer" id="answer" hidden></span>
           </div>
-          <p class="help-card-action" id="action-name">Wizard 顯示介入卡後，這裡會同步顯示語句與詳細步驟。</p>
+          <p class="help-card-action" id="action-name" hidden></p>
         </header>
         <div class="help-card-body">
           <figure class="help-card-image">
@@ -28,7 +28,7 @@
           </figure>
           <div class="help-card-steps" id="detail-scroll">
             <ol class="help-card-list" id="detail-list"></ol>
-            <p class="help-card-empty" id="details-empty">目前沒有介入指令。</p>
+            <p class="help-card-empty" id="details-empty" hidden>這個步驟沒有更細的動作。</p>
           </div>
         </div>
           <button id="fullscreen-button" type="button" aria-pressed="false" aria-label="全螢幕" title="全螢幕">
@@ -37,6 +37,7 @@
       </section>
       <section class="actor-bottom" aria-label="要說的語句">
         <div class="actor-speech" aria-live="polite">
+          <p id="speech-empty">X</p>
           <div id="speech-lines" aria-label="助手語句流程"></div>
         </div>
       </section>

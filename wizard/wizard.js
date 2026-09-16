@@ -532,6 +532,18 @@ function syncProactiveRow(row, key, action, entry, isShowing) {
 
 // 說明卡可能屬於別的頁面，所以在步驟清單之外再給一條全域的提示與關閉鈕。
 function syncOverlayStatus(state) {
+  document.querySelectorAll("[data-actor-error]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(state.actorError === button.dataset.actorError));
+  });
+  if (state.actorError) {
+    elements.overlayStatus.hidden = false;
+    elements.overlayStatus.dataset.mode = "error";
+    elements.overlayStatus.dataset.interventionLevel = "error";
+    elements.overlayStatus.dataset.category = "error";
+    elements.overlayStatusText.textContent = `向參與者說明：${window.ACTOR_SPEECH.explanation[state.actorError] || state.actorError}`;
+    elements.overlayClose.textContent = "關閉說明頁面";
+    return;
+  }
   // 兩種卡共用這條提示；server 保證同時只有一張。
   const proactiveKey = state.proactiveOverlay || null;
   const key = proactiveKey || state.helpOverlay || null;
@@ -816,11 +828,23 @@ elements.adjustForm.addEventListener("submit", (event) => {
 });
 
 elements.overlayClose.addEventListener("click", () => {
+  if (elements.overlayStatus.dataset.mode === "error") {
+    dispatch({ type: "setActorError", message: null });
+    return;
+  }
   const proactive = elements.overlayStatus.dataset.mode === "proactive";
   dispatch({ type: proactive ? "setProactiveOverlay" : "setHelpOverlay", key: null });
 });
 
 elements.undoButton.addEventListener("click", () => dispatch({ type: "undoLedger" }));
+document.querySelectorAll("[data-actor-error]").forEach((button) => {
+  button.textContent = window.ACTOR_SPEECH.explanation[button.dataset.actorError];
+  button.addEventListener("click", () => {
+    const message = window.WozStore.state?.actorError === button.dataset.actorError
+      ? null : button.dataset.actorError;
+    dispatch({ type: "setActorError", message });
+  });
+});
 elements.exportButton.addEventListener("click", () => {
   const link = document.createElement("a");
   link.href = "/api/export";
@@ -854,3 +878,20 @@ window.WozImages.onLoad(() => {
   if (window.WozStore.state) applyState(window.WozStore.state);
 });
 window.WozImages.load();
+
+document.querySelector("#actor-custom-toggle").addEventListener("click", () => {
+  const form = document.querySelector("#actor-custom-form");
+  form.hidden = !form.hidden;
+  document.querySelector("#actor-custom-toggle").setAttribute("aria-expanded", String(!form.hidden));
+  document.querySelector("#actor-custom-toggle").textContent = form.hidden ? "顯示自訂文字" : "隱藏自訂文字";
+  if (!form.hidden) document.querySelector("#actor-custom-message").focus();
+});
+document.querySelector("#actor-custom-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = document.querySelector("#actor-custom-message").value.trim();
+  if (!message) return;
+  const status = document.querySelector("#actor-custom-status");
+  status.textContent = "傳送中…";
+  const result = await dispatch({ type: "setActorError", message });
+  status.textContent = result ? "已送出到 Actor" : "傳送失敗，請確認連線後重試。";
+});

@@ -9,6 +9,11 @@
     return label;
   }
   function view(state, slides, speech) {
+    if (state.actorError) return {
+      key: `error:${state.actorError}`, kind: "error", title: "向參與者說明", level: "error",
+      name: "", step: "", answer: null, image: "", details: [], lines: [],
+      message: speech.explanation?.[state.actorError] || state.actorError,
+    };
     const proactive = Boolean(state.proactiveOverlay);
     const key = state.proactiveOverlay || state.helpOverlay;
     if (!key) return null;
@@ -33,9 +38,9 @@
       step: actionLetter(actionIndex), action: actionLetter(actionIndex), name: action.name,
       details: details.filter((_, index) => picked.has(index)).join("；") || action.name,
     };
-    const templates = kind === "voice_reminder"
+    const templates = kind === "voice_reminder" || kind === "voice"
       ? details.flatMap((detail, index) => picked.has(index)
-        ? (speech.voice_reminder || []).map((line) => ({
+        ? (speech[kind] || []).map((line) => ({
           ...line,
           label: line.label.replace(/\{number\}/g, String(index + 1).padStart(2, "0")),
           text: line.text.replace(/\{detail\}/g, () => detail),

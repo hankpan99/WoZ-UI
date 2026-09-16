@@ -32,9 +32,16 @@
     const container = find("speech-lines");
     container.replaceChildren();
     if (!view) return;
+    if (view.kind === "error") {
+      const message = document.createElement("p");
+      message.className = "actor-error-message";
+      message.textContent = `：${view.message}`;
+      container.append(message);
+      return;
+    }
     const flow = document.createElement("div");
     flow.className = "speech-flow";
-    if (view.kind === "voice_reminder") {
+    if (view.kind === "voice_reminder" || view.kind === "voice") {
       flow.classList.add("reminder-flow");
       view.lines.forEach((line) => flow.append(speechCard(line)));
       if (!view.lines.length) {
@@ -87,10 +94,14 @@
     const view = window.ActorModel.view(state, window.RECIPE_SLIDES || [], window.ACTOR_SPEECH);
     if (view?.key !== currentView?.key) find("detail-scroll").scrollTop = 0;
     currentView = view;
+    document.querySelector(".actor-shell").classList.toggle("is-idle", !view);
+    document.querySelector(".actor-shell").classList.toggle("is-error", view?.kind === "error");
     document.querySelector(".actor-shell").dataset.level = view?.level || "1";
     find("intervention-title").textContent = view?.title || "等待介入指令";
     find("step-label").textContent = view?.step || "";
-    find("action-name").textContent = view?.name || "Wizard 顯示介入卡後，這裡會同步顯示語句與詳細步驟。";
+    find("action-name").textContent = view?.name || "";
+    find("action-name").hidden = !view || view.kind === "error";
+    find("speech-empty").hidden = Boolean(view);
     find("answer").hidden = !view?.answer || view.answer === "pending";
     find("answer").textContent = { accepted: "參與者已接受", declined: "參與者已拒絕" }[view?.answer] || "";
     find("answer").dataset.answer = view?.answer || "";
@@ -102,8 +113,7 @@
       item.classList.toggle("is-off", !detail.selected);
       return item;
     }));
-    find("details-empty").hidden = Boolean(view?.details.length);
-    find("details-empty").textContent = view ? "這個步驟沒有更細的動作。" : "目前沒有介入指令。";
+    find("details-empty").hidden = !view || view.kind === "error" || Boolean(view.details.length);
     showImage();
     fitDetails();
   }

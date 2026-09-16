@@ -18,6 +18,16 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .actor-top { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border-radius: 26px; }
 .actor-top .help-card-name { font-size: var(--actor-title-size); }
 .actor-top .help-card-action { font-size: var(--actor-action-size); }
+.actor-top .help-card-action[hidden], #speech-empty[hidden] { display: none; }
+.actor-shell.is-idle { --helped-border: #b8b8b8; --helped-bg: #e3e3e3; --helped-badge-text: #555; }
+.actor-shell.is-idle .help-card-name { font-size: clamp(3rem, 4.5vw, 4.5rem); white-space: normal; }
+#speech-empty { margin: 0; text-align: center; color: #555; font-size: clamp(2.5rem, 4vw, 4rem); font-weight: 750; line-height: 1.35; }
+.actor-shell.is-idle #speech-lines { display: none; }
+.actor-shell.is-idle .help-card-image { display: none; }
+.actor-shell.is-error { --helped-border: #cf5b5b; --helped-bg: #f3baba; --helped-badge-text: #9b2020; }
+.actor-shell.is-error .help-card-body { display: none; }
+.actor-shell.is-error .help-card-name { font-size: clamp(3rem, 4.5vw, 4.5rem); }
+.actor-error-message { margin: 0; text-align: center; color: #9b2020; font-size: clamp(2.5rem, 4vw, 4rem); font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
 #fullscreen-button { position: absolute; right: 12px; bottom: 12px; z-index: 1; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: rgba(255, 255, 255, .88); backdrop-filter: blur(6px); color: var(--blue); box-shadow: 0 3px 8px rgba(34, 40, 30, .12); cursor: pointer; transition: background .15s, box-shadow .15s, transform .15s; }
 #fullscreen-button svg { width: 20px; height: 20px; flex-shrink: 0; }
 #fullscreen-button:hover { background: var(--blue); color: var(--white); border-color: var(--blue); box-shadow: 0 5px 12px rgba(34, 40, 30, .18); transform: translateY(-1px); }
@@ -64,3 +74,5 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .actor-shell[data-level="2"] { --helped-border: var(--reminder-border); --helped-bg: var(--reminder-bg); --helped-badge-text: var(--reminder-text); }
 .actor-shell[data-level="3"] { --helped-border: var(--proactive-border); --helped-bg: var(--proactive-bg); --helped-badge-text: var(--proactive-text); }
 .actor-shell[data-level="4"] { --helped-border: var(--direct-border); --helped-bg: var(--direct-bg); --helped-badge-text: var(--direct-text); }
+
+.actor-error-message { white-space: pre-wrap; }

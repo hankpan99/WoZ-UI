@@ -127,6 +127,7 @@ def default_state():
         "helpDetails": {},
         # client 上正在顯示的整頁說明卡，或 None。
         "helpOverlay": None,
+        "actorError": None,  # Wizard 指定 Actor 顯示的錯誤語句。
         # 助手主動提議的結果。key -> {"status": "accepted"|"declined", "cost": n}
         "proactive": {},
         # client 上正在顯示的主動提議卡，或 None。與 helpOverlay 互斥（同時只有一張卡）。
@@ -315,7 +316,22 @@ def apply_action(state, action):
     """套用一個 action。回傳 (新狀態, 是否有變更)。state 會被就地修改。"""
     kind = action.get("type")
 
-    if kind == "setPage":
+    if kind == "setActorError":
+        message = action.get("message")
+        if message is not None and not isinstance(message, str):
+            return state, False
+        if isinstance(message, str):
+            message = message.strip()
+            if not message:
+                return state, False
+        if message == state.get("actorError"):
+            return state, False
+        state["actorError"] = message
+        if message:
+            state["helpOverlay"] = None
+            state["proactiveOverlay"] = None
+
+    elif kind == "setPage":
         index = _clamp_index(action.get("index"))
         if index == state["currentIndex"]:
             return state, False
@@ -379,6 +395,7 @@ def apply_action(state, action):
                       "interventionType": "proactive" if mode == "voice_reminder" else "passive"})
         state["ledger"].append(entry)
         state["helped"][key] = cost
+        state["actorError"] = None
         state["helpOverlay"] = key
         state["proactiveOverlay"] = None
 
@@ -416,8 +433,9 @@ def apply_action(state, action):
         # 只有已經扣過點的步驟才叫得出說明卡；None＝關掉。
         key = action.get("key")
         key = key if isinstance(key, str) and key in state["helped"] else None
-        if key == state["helpOverlay"]:
+        if key == state["helpOverlay"] and not state.get("actorError"):
             return state, False
+        state["actorError"] = None
         state["helpOverlay"] = key
         # 兩張卡互斥：叫出說明卡就把主動提議卡收掉。
         if key:
@@ -427,8 +445,9 @@ def apply_action(state, action):
         # 只有 Excel 標過「介入」的步驟才有提議卡可以叫；None＝關掉。
         key = action.get("key")
         key = key if isinstance(key, str) and action_proactive(key) else None
-        if key == state["proactiveOverlay"]:
+        if key == state["proactiveOverlay"] and not state.get("actorError"):
             return state, False
+        state["actorError"] = None
         state["proactiveOverlay"] = key
         if key:
             state["helpOverlay"] = None
