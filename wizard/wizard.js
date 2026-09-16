@@ -49,6 +49,9 @@ const expandedKeys = new Set();
 const manualCostKeys = new Set();
 // 上一次的「接受幫助」集合，用來認出剛勾起來的步驟並自動展開它的詳細步驟。
 let lastHelpedKeys = new Set();
+const intervention = window.WizardIntervention.create(dispatch, () => {
+  if (window.WozStore.state) syncStepList(window.WozStore.state);
+});
 
 const pageLabel = (slide) => {
   const meal = cleanLabel(slide.meal);
@@ -178,7 +181,11 @@ function buildStepList() {
       costInput.dataset.role = "cost";
       costInput.value = String(action.cost);
       // 一旦 wizard 自己打了數字，就不要再被詳細步驟的自動計價蓋掉。
-      costInput.addEventListener("input", () => manualCostKeys.add(key));
+      costInput.min = "0";
+      costInput.addEventListener("input", () => {
+        manualCostKeys.add(key);
+        if (window.WozStore.state) syncStepList(window.WozStore.state);
+      });
       manualCostKeys.delete(key);
 
       const interventionModes = document.createElement("div");
@@ -197,17 +204,23 @@ function buildStepList() {
         button.textContent = text;
         if (mode === "voice_reminder") button.disabled = true;
         button.addEventListener("click", () => {
-          const cost = Number(costInput.value);
-          manualCostKeys.delete(key);
-          dispatch({
-            type: "repeatHelped",
-            key,
-            mode,
-            cost: Number.isFinite(cost) ? cost : action.cost,
-            note: `第${slide.step}頁 · 步驟${stepLabel(index)} 接受幫助`,
-          });
+          expandedKeys.add(key);
+          intervention.select(key, mode);
         });
         interventionModes.append(button);
+      });
+
+      const executeButton = document.createElement("button");
+      executeButton.type = "button";
+      executeButton.className = "execute-intervention-button";
+      executeButton.dataset.role = "execute-intervention";
+      executeButton.disabled = true;
+      executeButton.textContent = "執行介入";
+      executeButton.addEventListener("click", async () => {
+        if (await intervention.execute(key, costInput.valueAsNumber)) {
+          manualCostKeys.delete(key);
+          if (window.WozStore.state) syncStepList(window.WozStore.state);
+        }
       });
 
       // 說明卡是參與者畫面上那張整頁的框；勾「接受幫助」時會自動叫出來，
@@ -227,11 +240,12 @@ function buildStepList() {
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
         costInput,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
+        executeButton,
         overlayButton,
       );
       helpRow.append(Object.assign(document.createElement("span"), {
         className: "repeatable-hint",
-        textContent: "每按一次介入模式，就新增一次執行紀錄",
+        textContent: "先選模式與動作，再按執行介入才扣點並新增紀錄。",
       }));
 
       body.append(title);
@@ -436,13 +450,16 @@ function syncStepList(state) {
 
     row.querySelector('[data-role="done"]').checked = isDone;
     const helpMode = isHelped ? (helpModes[key] || "physical") : null;
+    const selectedMode = intervention.mode(key);
+    const executing = intervention.busy(key);
     row.querySelectorAll('[data-role="help-mode"]').forEach((button) => {
-      // 每顆都是「執行一次」，不再表示開啟／關閉狀態。
-      button.classList.remove("is-on");
-      button.removeAttribute("aria-pressed");
+      button.classList.toggle("is-on", selectedMode === button.dataset.mode);
+      button.setAttribute("aria-pressed", String(selectedMode === button.dataset.mode));
+      button.disabled = executing;
       if (button.dataset.mode === "voice_reminder") {
-        button.disabled = !state.supportedHelpModes?.includes("voice_reminder");
-        button.title = button.disabled ? "請重啟 server 以啟用模式 2" : "";
+        const supported = state.supportedHelpModes?.includes("voice_reminder");
+        button.disabled = executing || !supported;
+        button.title = supported ? "" : "請重啟 server 以啟用模式 2";
       }
     });
 
@@ -471,7 +488,17 @@ function syncStepList(state) {
       // wizard 手動打過的數字仍優先，直到再調整詳細動作或按下一次介入。
       if (!manualCostKeys.has(key)) costInput.value = String(helpCost(action, picked.size));
     }
-    costInput.disabled = false;
+    costInput.disabled = executing;
+    const executeButton = row.querySelector('[data-role="execute-intervention"]');
+    const validCost = Number.isFinite(costInput.valueAsNumber) && costInput.valueAsNumber >= 0;
+    const supportedMode = selectedMode !== "voice_reminder" || state.supportedHelpModes?.includes("voice_reminder");
+    executeButton.disabled = !selectedMode || executing || !validCost || !supportedMode;
+    executeButton.textContent = executing ? "執行中…" : `執行介入（扣 ${validCost ? formatPoints(costInput.valueAsNumber) : "—"} 點）`;
+    executeButton.dataset.mode = selectedMode || "";
+    const hint = row.querySelector(".repeatable-hint");
+    hint.setAttribute("role", "status");
+    hint.textContent = intervention.message(key) || "先選模式與動作，再按執行介入才扣點並新增紀錄。";
+    row.querySelectorAll("[data-detail-index], .mini-button").forEach((control) => { control.disabled = executing; });
 
     const overlayButton = row.querySelector('[data-role="overlay"]');
     overlayButton.disabled = !isHelped;
@@ -729,7 +756,9 @@ function syncLedger(state) {
 // ---- 狀態進來時 ----------------------------------------------------------
 
 function applyState(state) {
-  currentIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
+  const nextIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
+  if (nextIndex !== currentIndex) intervention.clear();
+  currentIndex = nextIndex;
 
   const soundEnabled = state.soundEnabled !== false;
   elements.soundToggle.textContent = soundEnabled ? "🔔 主動提示音：開" : "🔕 主動提示音：關";
@@ -817,6 +846,7 @@ elements.exportButton.addEventListener("click", () => {
 });
 elements.resetButton.addEventListener("click", () => {
   if (confirm("確定要重置全部狀態嗎？頁面、勾選與所有點數紀錄都會清空。")) {
+    intervention.clear();
     dispatch({ type: "reset" });
   }
 });

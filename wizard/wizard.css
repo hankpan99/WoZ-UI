@@ -348,7 +348,11 @@ h2, h3 { margin: 0; }
 .intervention-mode-button.voice:hover,
 .intervention-mode-button.voice.is-on { color: var(--white); background: var(--helped-border); }
 .intervention-mode-button.voice_reminder { grid-column: 1 / -1; color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
-.intervention-mode-button.voice_reminder:hover { color: var(--white); background: var(--reminder-border); }
+.intervention-mode-button.voice_reminder:hover,
+.intervention-mode-button.voice_reminder.is-on { color: var(--white); background: var(--reminder-border); }
+.execute-intervention-button { padding: 10px 14px; border: 1px solid var(--helped-border); border-radius: 8px; background: var(--helped-border); color: var(--white); font-size: .9rem; font-weight: 750; cursor: pointer; }
+.execute-intervention-button[data-mode="voice_reminder"] { border-color: var(--reminder-border); background: var(--reminder-border); }
+.execute-intervention-button:disabled { opacity: .45; cursor: not-allowed; }
 .intervention-mode-button:disabled { opacity: .4; cursor: not-allowed; }
 .intervention-mode-button.voice_reminder:disabled:hover { color: var(--reminder-text); background: var(--reminder-bg); }
 .cost-caption { color: var(--muted); font-size: .85rem; font-weight: 600; }
