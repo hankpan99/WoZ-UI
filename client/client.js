@@ -78,7 +78,6 @@ const elements = {
   helpOverlayList: document.querySelector("#help-overlay-list"),
   helpOverlayEmpty: document.querySelector("#help-overlay-empty"),
   helpOverlayLegend: document.querySelector("#help-overlay-legend"),
-  helpOverlayLegendText: document.querySelector("#help-overlay-legend-text"),
   helpOverlayCostLabel: document.querySelector("#help-overlay-cost-label"),
   helpOverlayCost: document.querySelector("#help-overlay-cost"),
   offlineBanner: document.querySelector("#offline-banner"),
@@ -619,9 +618,13 @@ function syncHelpOverlay(state) {
   elements.helpOverlayEmpty.hidden = details.length > 0;
   // 圖例只在真的有灰字時才出現；整步驟都由助手做的話沒什麼好對照的。
   elements.helpOverlayLegend.hidden = picked.size === details.length;
-  elements.helpOverlayLegendText.textContent = isProposal
-    ? "動作助手可以幫您完成"
-    : "動作將由助手介入";
+  const legendOn = document.createElement("span");
+  legendOn.className = "legend-on";
+  legendOn.textContent = "黑色字體";
+  const legendText = isProposal || interventionMode === "physical"
+    ? "動作將由助手實體介入，其餘則由您獨立完成"
+    : "動作將由助手語音介入、所有動作皆須由您完成";
+  elements.helpOverlayLegend.replaceChildren(legendOn, document.createTextNode(legendText));
 
   // 還沒回答的提議寫「接受將花費」，其他情況都是已經確定的金額。
   elements.helpOverlayCostLabel.textContent = isProposal && !answer ? "接受將花費" : "本次花費";

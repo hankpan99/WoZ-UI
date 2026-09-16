@@ -368,7 +368,7 @@ images/icon/水果優格-製作.jpeg          ← 第 13、15 頁共用
 | 步驟名稱（最大那行） | `--help-card-title-size` | `2.4rem` |
 | 詳細步驟前面的編號 `01` | `--help-card-index-size` | `.78em` |
 | 詳細步驟的文字 | `--help-card-item-size` | `1.7rem` |
-| 最下方的圖例 | `--help-card-legend-size` | `1.2rem` |
+| 最下方的圖例 | `--help-card-legend-size` | `1.3rem` |
 | 「本次花費」四個字 | `--help-card-cost-label-size` | `1.7rem` |
 | 點數的數字 | `--help-card-cost-size` | `3.6rem` |
 | 數字後面的「點」 | `--help-card-cost-unit-size` | `.4em` |
