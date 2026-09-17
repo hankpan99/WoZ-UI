@@ -39,6 +39,17 @@
         </article>
       </section>
 
+      <section class="assistant-status" aria-label="助手執行狀態" aria-live="polite">
+        <div class="assistant-slot assistant-now">
+          <span class="assistant-label">Alex正在執行：</span>
+          <strong class="assistant-text" id="assistant-current">無</strong>
+        </div>
+        <div class="assistant-slot assistant-next">
+          <span class="assistant-label">Alex準備執行：</span>
+          <span class="assistant-queue" id="assistant-queue"></span>
+        </div>
+      </section>
+
       <section class="recipe-stage" aria-live="polite">
         <div class="slide-layout">
           <aside class="preview-panel" id="preview-panel">
@@ -67,10 +78,6 @@
       </section>
     </main>
 
-    <div class="preview-status" id="preview-status" role="status" aria-live="assertive" hidden>
-      <strong>預覽步驟中</strong>
-    </div>
-
     <div class="help-overlay" id="help-overlay" role="dialog" aria-modal="true"
          aria-labelledby="help-overlay-name" hidden>
       <div class="help-card">
@@ -97,7 +104,7 @@
         </div>
         <footer class="help-card-foot">
           <p class="help-card-legend" id="help-overlay-legend" hidden>
-            <span class="legend-on">黑色字體</span><span id="help-overlay-legend-text">動作將由助手介入</span>、<span class="legend-off">淺灰色字體</span>則由您獨立完成
+            <span class="legend-on">黑色字體</span>動作將由助手實體介入，其餘則由您獨立完成
           </p>
           <span class="help-card-cost-label" id="help-overlay-cost-label">本次花費</span>
           <strong class="help-card-cost"><span id="help-overlay-cost">0</span><small> $</small></strong>

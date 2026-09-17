@@ -27,6 +27,9 @@
   --proactive-border: #3f7cae;
   --proactive-bg: #eaf2f9;
   --proactive-text: #1f4f76;
+  /* Client 步驟預覽固定使用藍色，不跟著各介入模式換色。 */
+  --preview-border: #3f7cae;
+  --preview-text: #1f4f76;
   /* 主動按鈕寬度＝下方兩顆被動按鈕合計寬度。 */
   --intervention-controls-width: 300px;
   --done-bg: #f0f1ed;
@@ -40,7 +43,6 @@
   --shadow: rgba(34, 40, 30, .07);
 
   /* 版面 */
-  --top-height: 74px;
   --points-panel-width: 400px;
 
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
@@ -50,7 +52,8 @@
 
 body {
   display: grid;
-  grid-template-rows: var(--top-height) minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
   gap: 12px;
   height: 100vh;
   margin: 0;
@@ -67,62 +70,82 @@ h2, h3 { margin: 0; }
 
 .wizard-top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
   gap: 20px;
   align-items: center;
-  padding: 0 16px;
+  padding: 10px 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--white);
   box-shadow: 0 4px 14px var(--shadow);
 }
 
-.page-switcher { display: flex; gap: 8px; align-items: center; }
-.page-toggle { display: flex; gap: 4px; }
+/* min-width: 0 讓這一欄在螢幕不夠寬時可以縮小，改成自己橫向捲動，
+   而不是把 wizard-top 撐爆、被外層 body 的 overflow:hidden 直接裁掉。 */
+.page-switcher { display: flex; gap: 8px; align-items: center; min-width: 0; overflow-x: auto; }
+/* conn 現在跟 page-switcher 共用剩下的那一欄，靠右對齊撐到最右邊。 */
+.conn { justify-self: end; }
+/* 左半邊＝第 1~9 頁、右半邊＝其餘頁面，各自維持原本的分行；
+   中間留白隔開，讓兩邊看起來是分開的兩組。 */
+.page-toggle { display: flex; gap: 28px; }
+.page-toggle-col + .page-toggle-col { padding-left: 24px; border-left: 1px solid var(--line); }
+.page-toggle-col { display: flex; flex-direction: column; gap: 4px; }
+.page-toggle-row { display: flex; gap: 4px; }
 
 .page-button {
   position: relative;
-  width: 38px;
-  height: 40px;
-  padding: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 136px;
+  min-height: 36px;
+  padding: 3px 5px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--white);
-  font-size: .95rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
+.page-button-index {
+  flex: none;
+  font-size: .92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: .7;
+}
+.page-button-label {
+  overflow: hidden;
+  min-width: 0;
+  font-size: .8rem;
+  font-weight: 650;
+  white-space: nowrap;
+  text-align: center;
+  text-overflow: ellipsis;
+}
 .page-button:hover { border-color: var(--blue); background: var(--blue-light); }
 .page-button.current { color: var(--white); border-color: var(--ink); background: var(--ink); }
-/* 已經有勾選紀錄的頁面：右上角一個小點 */
-.page-button.touched::after {
+/* 該頁動作全部完成：文字淡出，讓還沒做完的頁面比較顯眼；
+   淡出只套在文字上，不套在按鈕本身，這樣左上角的主動幫助紅點才不會被一起變灰。 */
+.page-button.stage-complete:not(.current) .page-button-index,
+.page-button.stage-complete:not(.current) .page-button-label {
+  filter: grayscale(.9);
+  opacity: .5;
+}
+/* 該頁還有主動幫助沒選「接受」或「拒絕」：左上角一個紅點 */
+.page-button.proactive-pending::before {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
+  top: 3px;
+  left: 3px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--blue-accent);
+  background: var(--minus);
+  box-shadow: 0 0 0 2px var(--white);
   content: "";
 }
-
-.page-arrow {
-  width: 34px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--white);
-  cursor: pointer;
-}
-.page-arrow:hover:not(:disabled) { background: var(--panel-bg); }
-.page-arrow:disabled { opacity: .3; cursor: not-allowed; }
-
-.page-meta { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
-.page-meta-index { color: var(--muted); font-size: .95rem; font-weight: 650; white-space: nowrap; }
-.page-meta-name { color: var(--blue); font-size: 1.25rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-button.proactive-pending.current::before { box-shadow: 0 0 0 2px var(--ink); }
 
 .conn { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; font-weight: 650; white-space: nowrap; }
 .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -133,12 +156,58 @@ h2, h3 { margin: 0; }
 
 /* ===== 主體 ===== */
 
-.wizard-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
-  gap: 12px;
-  min-height: 0;
+.wizard-top { grid-column: 1 / -1; grid-row: 1; }
+.wizard-body { display: contents; }
+.wizard-explanation-panel { grid-column: 1; grid-row: 2; }
+.assistant-queue-panel { grid-column: 1; grid-row: 3; }
+.steps-panel { grid-column: 1; grid-row: 4; }
+.points-panel { grid-column: 2; grid-row: 2 / 5; }
+
+/* ===== 助手佇列：左＝正在執行，右＝準備執行 ===== */
+
+.assistant-queue-panel {
+  grid-template-rows: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  max-height: 32dvh;
 }
+.assistant-queue-now,
+.assistant-queue-next { display: grid; grid-template-rows: auto auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); align-content: start; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.assistant-queue-now { border-right: 1px solid var(--line); background: var(--helped-bg); }
+.assistant-queue-next { grid-template-rows: auto minmax(0, 1fr); }
+.assistant-queue-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; padding: 9px 14px; }
+.assistant-queue-head h2 { font-size: .98rem; }
+.assistant-queue-actions { display: flex; gap: 6px; }
+.assistant-busy-hint { min-width: 0; color: var(--minus); font-size: .76rem; font-weight: 700; }
+.assistant-busy-hint[hidden] { display: none; }
+.assistant-queue-current { padding: 0 14px 10px; font-size: 1.05rem; font-weight: 700; }
+.assistant-queue-current .queue-label { white-space: normal; }
+.assistant-stop-editor { padding: 0 14px 12px; }
+.assistant-stop-editor[hidden] { display: none; }
+
+.assistant-queue-list { display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; gap: 4px; margin: 0; padding: 0 14px 10px; list-style: none; }
+.assistant-queue-item { display: flex; gap: 8px; align-items: center; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-bg); }
+.assistant-queue-item.is-showing { border-color: var(--helped-border); box-shadow: 0 0 0 2px var(--helped-border); }
+.assistant-queue-item .ghost-button { flex-shrink: 0; padding: 4px 10px; }
+.assistant-queue-item .queue-summary { flex: 1 1 auto; overflow: hidden; }
+.queue-show-button.is-showing { color: var(--white); border-color: var(--helped-border); background: var(--helped-border); }
+.queue-order { flex-shrink: 0; color: var(--muted); font-size: .8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.queue-summary { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.queue-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; font-weight: 650; }
+.queue-mode { flex-shrink: 0; padding: 2px 7px; border-radius: 99px; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+.queue-mode.level-1 { color: var(--helped-badge-text); background: var(--white); box-shadow: inset 0 0 0 1px var(--helped-border); }
+.queue-mode.level-2 { color: var(--reminder-text); background: var(--reminder-bg); }
+.queue-mode.level-3 { color: var(--proactive-text); background: var(--proactive-bg); }
+.queue-mode.level-4 { color: var(--direct-text); background: var(--direct-bg); }
+.queue-empty { color: var(--muted); font-size: .86rem; font-weight: 600; }
+
+/* 喊停與紀錄修正共用的「實際做過哪些動作」編輯器 */
+.execution-editor { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--helped-border); border-radius: 9px; background: var(--white); }
+.ledger-row .execution-editor { grid-column: 1 / -1; }
+.execution-editor-title { margin-right: auto; font-size: .82rem; font-weight: 750; }
+.execution-editor-empty { color: var(--muted); font-size: .8rem; }
+.execution-editor-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.execution-editor-foot .execute-intervention-button { padding: 6px 10px; font-size: .8rem; }
+.execution-editor-foot .ghost-button { padding: 5px 10px; }
 
 .panel {
   display: grid;
@@ -181,13 +250,11 @@ h2, h3 { margin: 0; }
 /* ===== 步驟清單 ===== */
 
 /* panel-head ＋ Client 查看提示 ＋ 說明卡提示列 ＋ 清單。 */
-.steps-panel { grid-template-rows: auto auto auto auto auto minmax(0, 1fr); }
+.steps-panel { grid-template-rows: auto auto auto minmax(0, 1fr); }
 .steps-panel > .panel-head { grid-row: 1; }
 .steps-panel > .client-view-status { grid-row: 2; }
 .steps-panel > .overlay-status { grid-row: 3; }
-.steps-panel > .actor-error-controls { grid-row: 4; }
-.steps-panel > #actor-custom-form { grid-row: 5; }
-.steps-panel > .step-list { grid-row: 6; }
+.steps-panel > .step-list { grid-row: 4; }
 
 .client-view-status {
   display: flex;
@@ -241,8 +308,8 @@ h2, h3 { margin: 0; }
   transition: background .15s ease, border-color .15s ease;
 }
 .step-row.is-helped { border-color: var(--helped-border); background: var(--helped-bg); }
-.step-row.is-done { background: var(--done-bg); }
-.step-row.is-done.is-helped { background: var(--helped-bg); }
+.step-row.is-done { position: relative; }
+.step-row.is-done::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 6px; border-radius: 11px 0 0 11px; background: var(--done-button-checked); pointer-events: none; }
 .step-row.is-helped.is-help-reminder { border-color: var(--reminder-border); background: var(--reminder-bg); }
 .step-row[data-proactive-level="4"] { --proactive-border: var(--direct-border); --proactive-bg: var(--direct-bg); --proactive-text: var(--direct-text); }
 .step-row.is-done .step-name { color: var(--muted); text-decoration: line-through; }
@@ -260,15 +327,18 @@ h2, h3 { margin: 0; }
 }
 .done-check > span {
   display: block;
-  padding: 8px 12px;
-  color: var(--white);
+  padding: 10px 16px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--done-button);
   border: 1px solid var(--done-button);
   border-radius: 8px;
-  background: var(--done-button);
+  background: var(--white);
   transition: color .15s ease, background .15s ease;
 }
-.done-check:hover > span { background: var(--done-button-hover); }
-.done-check input:checked + span { border-color: var(--done-button-checked); background: var(--done-button-checked); }
+.done-check:hover > span { border-color: var(--done-button-hover); background: var(--panel-bg, #fafaf8); }
+.done-check input:checked + span { color: var(--white); border-color: var(--done-button-checked); background: var(--done-button-checked); }
 .done-check input:focus-visible + span { outline: 2px solid var(--ink); outline-offset: 2px; }
 .proactive-check input { accent-color: var(--proactive-border); }
 
@@ -279,24 +349,29 @@ h2, h3 { margin: 0; }
 .step-image-mark { flex-shrink: 0; font-size: .82rem; cursor: help; }
 .step-list-price { padding: 3px 9px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: .8rem; font-weight: 700; white-space: nowrap; }
 
-.step-row.is-client-view { border-color: var(--proactive-border); box-shadow: inset 4px 0 0 var(--proactive-border); }
+.step-row.is-client-view { border-color: var(--preview-border); box-shadow: inset 4px 0 0 var(--preview-border); }
 .client-view-button {
   margin-left: auto;
-  padding: 4px 9px;
-  color: var(--proactive-text);
-  border: 1px solid var(--proactive-border);
+  padding: 10px 16px;
+  color: var(--preview-text);
+  border: 1px solid var(--preview-border);
   border-radius: 7px;
   background: var(--white);
-  font-size: .76rem;
+  font-size: 1rem;
   font-weight: 700;
+  line-height: 1.4;
   white-space: nowrap;
   cursor: pointer;
 }
 .client-view-button:hover,
-.client-view-button.is-on { color: var(--white); background: var(--proactive-border); }
+.client-view-button.is-on { color: var(--white); background: var(--preview-border); }
 
 .help-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 34px; }
 .repeatable-hint { flex-basis: 100%; color: var(--muted); font-size: .76rem; }
+.repeatable-hint.is-warning,
+.busy-hint { color: var(--minus); font-weight: 700; }
+.busy-hint { flex-basis: 100%; font-size: .76rem; }
+.busy-hint[hidden] { display: none; }
 .intervention-check {
   position: relative;
   flex: 0 0 var(--intervention-controls-width);
@@ -346,7 +421,11 @@ h2, h3 { margin: 0; }
 .intervention-mode-button.voice:hover,
 .intervention-mode-button.voice.is-on { color: var(--white); background: var(--helped-border); }
 .intervention-mode-button.voice_reminder { grid-column: 1 / -1; color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
-.intervention-mode-button.voice_reminder:hover { color: var(--white); background: var(--reminder-border); }
+.intervention-mode-button.voice_reminder:hover,
+.intervention-mode-button.voice_reminder.is-on { color: var(--white); background: var(--reminder-border); }
+.execute-intervention-button { padding: 10px 14px; border: 1px solid var(--helped-border); border-radius: 8px; background: var(--helped-border); color: var(--white); font-size: .9rem; font-weight: 750; cursor: pointer; }
+.execute-intervention-button[data-mode="voice_reminder"] { border-color: var(--reminder-border); background: var(--reminder-border); }
+.execute-intervention-button:disabled { opacity: .45; cursor: not-allowed; }
 .intervention-mode-button:disabled { opacity: .4; cursor: not-allowed; }
 .intervention-mode-button.voice_reminder:disabled:hover { color: var(--reminder-text); background: var(--reminder-bg); }
 .cost-caption { color: var(--muted); font-size: .85rem; font-weight: 600; }
@@ -385,6 +464,7 @@ h2, h3 { margin: 0; }
 /* 只有 Excel「介入」欄標過 O 的步驟才有這一列。 */
 .proactive-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   min-height: 42px;
@@ -425,7 +505,6 @@ h2, h3 { margin: 0; }
   box-shadow: inset 3px 0 0 var(--proactive-border), 0 0 0 2px var(--proactive-border);
 }
 /* 已完成／已介入的底色要壓過主動提議的底色，維持既有的優先順序。 */
-.step-row.is-done.is-proactive-accepted { background: var(--done-bg); }
 .step-row.is-helped.is-proactive-accepted { background: var(--helped-bg); }
 
 /* ===== 詳細步驟 ===== */
@@ -494,7 +573,7 @@ h2, h3 { margin: 0; }
 
 /* ===== 點數面板 ===== */
 
-.points-panel { grid-template-rows: auto auto auto auto auto minmax(0, 1fr) auto; }
+.points-panel { grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; }
 
 /* 左右兩格分別顯示可指揮助手池與主動幫助池的「剩餘 / 總額」。 */
 .points-readout { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
@@ -508,20 +587,12 @@ h2, h3 { margin: 0; }
 .points-box .points-value { font-size: 1.6rem; }
 .points-value.negative { color: var(--minus); }
 
-.sound-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.sound-controls { display: grid; grid-template-columns: auto; gap: 6px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); }
 .sound-controls .ghost-button { padding: 7px 9px; white-space: nowrap; }
 .sound-toggle[aria-pressed="true"] { color: var(--proactive-text); border-color: var(--proactive-border); background: var(--proactive-bg); }
 .sound-select { min-width: 0; width: 100%; padding: 7px 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--white); font-size: .82rem; }
 .sound-controls small { grid-column: 1 / -1; color: var(--muted); font-size: .72rem; }
 
-.adjust { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.adjust-label { color: var(--muted); font-size: .85rem; font-weight: 650; white-space: nowrap; }
-.adjust-input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 1rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
-.adjust-input:focus { border-color: var(--blue); outline: none; }
-.adjust-button { padding: 8px 12px; border: 1px solid transparent; border-radius: 8px; font-size: .88rem; font-weight: 700; white-space: nowrap; cursor: pointer; }
-.adjust-button.add { color: var(--white); background: var(--plus); }
-.adjust-button.sub { color: var(--white); background: var(--minus); }
-.adjust-button:hover { filter: brightness(1.1); }
 
 .ledger-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 16px 8px; }
 .ledger-head h3 { font-size: .98rem; }
@@ -565,6 +636,15 @@ h2, h3 { margin: 0; }
 .ledger-partial-banner strong { color: var(--helped-badge-text); }
 .ledger-partial-banner .picked { color: var(--plus); }
 .ledger-partial-banner .unpicked { color: var(--minus); }
+.ledger-exec { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: 4px 8px; align-items: center; }
+.ledger-exec .mini-button { margin-left: auto; }
+.ledger-exec .mini-button.is-on { color: var(--white); border-color: var(--helped-border); background: var(--helped-border); }
+.ledger-status { padding: 1px 7px; border-radius: 99px; font-size: .7rem; font-weight: 800; white-space: nowrap; color: var(--muted); background: var(--white); box-shadow: inset 0 0 0 1px var(--line); }
+.ledger-status.status-queued { color: var(--helped-badge-text); box-shadow: inset 0 0 0 1px var(--helped-border); }
+.ledger-status.status-running { color: var(--white); background: var(--helped-border); box-shadow: none; }
+.ledger-status.status-stopped { color: var(--minus); box-shadow: inset 0 0 0 1px var(--minus); }
+.ledger-status.status-cancelled { color: var(--white); background: var(--muted); box-shadow: none; }
+.ledger-executed { min-width: 0; color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
 .ledger-empty { padding: 14px 0; color: var(--muted); font-size: .88rem; text-align: center; }
 
 .danger-button {
@@ -601,14 +681,15 @@ h2, h3 { margin: 0; }
 
 @media (max-width: 1180px) {
   :root { --points-panel-width: 340px; }
-  .page-button { width: 32px; }
+  /* 按鈕維持不換行的寬度；螢幕真的不夠寬時讓 .page-switcher 自己橫向捲動，
+     不要硬壓縮按鈕寬度（那樣文字會被裁更多）。 */
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
-.actor-error-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); background: #fff1f1; }
-.actor-error-controls h3 { margin: 0; color: #9b2020; }
+.actor-error-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); background: var(--white); }
+.actor-error-controls h2 { margin: 0; color: var(--ink); font-size: 1.1rem; }
 .actor-error-controls .danger-button { margin: 0; }
 .actor-error-controls .danger-button[aria-pressed="true"] { color: white; background: var(--minus); }
 .overlay-status[data-mode="error"] { background: #f9dada; color: #9b2020; border-bottom-color: #cf5b5b; }
@@ -619,3 +700,6 @@ h2, h3 { margin: 0; }
 #actor-custom-form .danger-button { justify-self: start; margin: 0; }
 #actor-custom-form[hidden] { display: none; }
 #actor-custom-message { display: block; box-sizing: border-box; width: 100%; min-height: 90px; margin: 0; padding: 10px; font: inherit; resize: vertical; }
+
+.wizard-explanation-panel { grid-template-rows: auto auto; max-height: 42dvh; overflow-y: auto; }
+.wizard-explanation-panel .actor-error-controls { border-bottom: 0; }

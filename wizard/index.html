@@ -10,13 +10,7 @@
   <body>
     <header class="wizard-top">
       <div class="page-switcher">
-        <button class="page-arrow" id="page-prev" type="button" aria-label="上一頁">←</button>
         <div class="page-toggle" id="page-toggle" role="group" aria-label="切換頁面"></div>
-        <button class="page-arrow" id="page-next" type="button" aria-label="下一頁">→</button>
-      </div>
-      <div class="page-meta">
-        <span class="page-meta-index" id="page-meta-index">第 1 頁</span>
-        <span class="page-meta-name" id="page-meta-name"></span>
       </div>
       <div class="conn" id="conn" data-status="connecting">
         <span class="conn-dot" aria-hidden="true"></span>
@@ -24,14 +18,55 @@
       </div>
     </header>
 
+    <section class="panel wizard-explanation-panel" aria-labelledby="wizard-explanation-title">
+        <div class="actor-error-controls" aria-label="Actor UI: 向參與者說明">
+          <h2 id="wizard-explanation-title">Actor UI: 向參與者說明</h2>
+          <button class="danger-button" type="button" data-actor-error="unrecognized"></button>
+          <button class="danger-button" type="button" data-actor-error="prerequisite"></button>
+          <button class="danger-button" type="button" data-actor-error="stage"></button>
+          <button class="danger-button" id="actor-custom-toggle" type="button" aria-expanded="false" aria-controls="actor-custom-form">顯示自訂文字</button>
+        </div>
+        <form id="actor-custom-form" hidden>
+          <label for="actor-custom-message">要向參與者說明的文字</label>
+          <textarea id="actor-custom-message" rows="3" required></textarea>
+          <button class="danger-button" type="submit">送出到 Actor</button>
+          <span id="actor-custom-status" role="status"></span>
+        </form>
+        <div class="overlay-status" id="actor-overlay-status" hidden>
+          <span class="overlay-status-dot" aria-hidden="true"></span>
+          <span class="overlay-status-text" id="actor-overlay-status-text"></span>
+          <button class="ghost-button" id="actor-overlay-close" type="button">關閉 Actor UI 顯示</button>
+        </div>
+    </section>
+
+    <section class="panel assistant-queue-panel" aria-label="助手執行佇列">
+      <div class="assistant-queue-now">
+        <div class="assistant-queue-head">
+          <h2>Alex 正在執行</h2>
+          <div class="assistant-queue-actions">
+            <button class="ghost-button" id="assistant-done" type="button">完成</button>
+            <button class="ghost-button" id="assistant-stop" type="button" aria-expanded="false">喊停</button>
+          </div>
+        </div>
+        <div class="assistant-queue-current" id="assistant-current"></div>
+        <div class="assistant-stop-editor" id="assistant-stop-editor" hidden></div>
+      </div>
+      <div class="assistant-queue-next">
+        <div class="assistant-queue-head">
+          <h2>Alex 準備執行 <span class="panel-count" id="assistant-queue-count">0 項</span></h2>
+          <span class="assistant-busy-hint" id="assistant-busy-hint" hidden>Alex 正在執行中：關閉字卡後項目會留在佇列最前面，之後需再開一次字卡</span>
+        </div>
+        <ol class="assistant-queue-list" id="assistant-queue-list"></ol>
+      </div>
+    </section>
+
     <main class="wizard-body">
       <section class="panel steps-panel">
         <div class="panel-head">
           <h2>本頁步驟 <span class="panel-count" id="step-count">0 / 0</span></h2>
           <div class="panel-actions">
-            <button class="ghost-button" id="view-prev" type="button">↑ 查看上一個</button>
-            <button class="ghost-button" id="view-next" type="button">↓ 查看下一個</button>
-            <button class="ghost-button" id="preview-all" type="button" title="在參與者畫面依序預覽本頁的所有步驟">▶ 預覽全部步驟</button>
+            <button class="ghost-button" id="view-prev" type="button">↑ 預覽上個步驟</button>
+            <button class="ghost-button" id="view-next" type="button">↓ 預覽下個步驟</button>
             <button class="ghost-button" id="mark-all" type="button">本頁全部完成</button>
             <button class="ghost-button" id="clear-all" type="button">本頁全部取消</button>
           </div>
@@ -44,21 +79,8 @@
         <div class="overlay-status" id="overlay-status" hidden>
           <span class="overlay-status-dot" aria-hidden="true"></span>
           <span class="overlay-status-text" id="overlay-status-text"></span>
-          <button class="ghost-button" id="overlay-close" type="button">關閉說明卡</button>
+          <button class="ghost-button" id="overlay-close" type="button">關閉 Client UI 顯示</button>
         </div>
-        <div class="actor-error-controls" aria-label="向參與者說明">
-          <h3>向參與者說明</h3>
-          <button class="danger-button" type="button" data-actor-error="unrecognized"></button>
-          <button class="danger-button" type="button" data-actor-error="prerequisite"></button>
-          <button class="danger-button" type="button" data-actor-error="stage"></button>
-          <button class="danger-button" id="actor-custom-toggle" type="button" aria-expanded="false" aria-controls="actor-custom-form">顯示自訂文字</button>
-        </div>
-        <form id="actor-custom-form" hidden>
-          <label for="actor-custom-message">要向參與者說明的文字</label>
-          <textarea id="actor-custom-message" rows="3" required></textarea>
-          <button class="danger-button" type="submit">送出到 Actor</button>
-          <span id="actor-custom-status" role="status"></span>
-        </form>
         <div class="step-list" id="step-list"></div>
       </section>
 
@@ -80,21 +102,8 @@
 
         <div class="sound-controls" aria-label="主動介入提示音">
           <button class="ghost-button sound-toggle" id="sound-toggle" type="button" aria-pressed="true">🔔 主動提示音：開</button>
-          <select class="sound-select" id="sound-preset" aria-label="選擇主動介入音效">
-            <option value="ding">柔和單聲</option>
-            <option value="chime">雙音提示</option>
-            <option value="beep">短促嗶聲</option>
-          </select>
-          <button class="ghost-button" id="sound-preview" type="button">試聽</button>
           <small>先在 Client 點「全螢幕」，音效才會從 Client 播放。</small>
         </div>
-
-        <form class="adjust" id="adjust-form">
-          <label class="adjust-label" for="adjust-input">手動調整</label>
-          <input class="adjust-input" id="adjust-input" type="number" step="any" min="0" placeholder="點數" />
-          <button class="adjust-button add" id="adjust-add" type="button">＋ 加點</button>
-          <button class="adjust-button sub" id="adjust-sub" type="submit">－ 扣點</button>
-        </form>
 
         <div class="ledger-head">
           <h3>紀錄 <span class="panel-count" id="ledger-count">0 筆</span></h3>
@@ -118,6 +127,7 @@
     <script src="/shared/images.js"></script>
     <script src="/shared/store.js"></script>
     <script src="/actor/speech.js"></script>
+    <script src="/wizard/intervention.js"></script>
     <script src="/wizard/wizard.js"></script>
   </body>
 </html>

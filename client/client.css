@@ -60,7 +60,7 @@
   --plate-shadow: rgba(55, 67, 51, .1);
 
   /* ===== 常用版面設定：請從這裡調整 ===== */
-  --top-panel-height: 200px;
+  --top-panel-height: 180px;
   --top-panel-height-compact: 118px;
   --fullscreen-width: 76px;
   --cost-panel-width: 1fr;
@@ -82,9 +82,20 @@
   --points-label-size: 2.3rem;
   --points-value-size: 3rem;
   --progress-count-size: 1.8rem;
+  /* 中間的「Alex正在執行／準備執行」列 */
+  --assistant-status-height: 72px;
+  /* 左邊（正在執行）比右邊（準備執行）寬 */
+  --assistant-now-width: minmax(0, 1.5fr);
+  --assistant-next-width: minmax(0, 1fr);
+  --assistant-padding: 0 26px;
+  --assistant-label-size: 1.6rem;
+  --assistant-text-size: 1.6rem;
+  --assistant-pill-size: 1.15rem;
   --step-name-size: 2rem;
   --step-index-size: 1.5rem;
   --cost-size: 1.5rem;
+  /* 步驟卡右側「🤖」標記（介入／主動）的大小 */
+  --help-badge-size: 1.2rem;
   --action-gap: 16px;
   /* 主畫面左側維持原本在 1440px 版面下約 610px 的寬度；
      更寬的螢幕把新增空間留給右側步驟。 */
@@ -126,14 +137,10 @@
   --help-card-image-fit: contain;
   --help-card-index-size: .78em;
   --help-card-item-size: 1.7rem;
-  --help-card-legend-size: 1.3rem;
+  --help-card-legend-size: 1.7rem;
   --help-card-cost-label-size: 1.7rem;
   --help-card-cost-size: 3.6rem;
   --help-card-cost-unit-size: .4em;
-  /* 「預覽步驟中」大型 pop-out：要自行調整尺寸就改這三個值。 */
-  --preview-popup-width: min(1100px, calc(100vw - 48px));
-  --preview-popup-height: 190px;
-  --preview-popup-font-size: 3rem;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
 }
 
@@ -153,7 +160,7 @@ button { color: inherit; }
 
 .app-shell {
   display: grid;
-  grid-template-rows: var(--top-panel-height) minmax(0, 1fr);
+  grid-template-rows: var(--top-panel-height) var(--assistant-status-height) minmax(0, 1fr);
   gap: 14px;
   width: calc(100% - 28px);
   height: 100vh;
@@ -211,6 +218,34 @@ button { color: inherit; }
 /* 上面兩條的 display: block 會蓋掉瀏覽器內建的 [hidden]，所以要自己寫一次。
    （client.js 的 SHOW_STEP_COST 用這個把「此步驟剩餘…」整行收掉。） */
 .stat-label[hidden], .stat-value[hidden] { display: none; }
+
+/* 上下兩塊中間：左＝Alex 正在執行，右＝Alex 準備執行（佇列）。
+   高度固定（--assistant-status-height），文字不換行：左邊放不下就變成「…」。 */
+.assistant-status {
+  display: grid;
+  grid-template-columns: var(--assistant-now-width) var(--assistant-next-width);
+  gap: 1px;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--line);
+}
+.assistant-slot { display: flex; gap: 12px; align-items: center; min-width: 0; padding: var(--assistant-padding); overflow: hidden; background: var(--white); white-space: nowrap; }
+.assistant-now { background: var(--helped-bg); }
+.assistant-label { flex-shrink: 0; color: var(--ink); font-size: var(--assistant-label-size); font-weight: 650; }
+.assistant-text { min-width: 0; overflow: hidden; font-size: var(--assistant-text-size); font-weight: 750; line-height: 1.3; text-overflow: ellipsis; }
+.assistant-now .assistant-text { color: var(--helped-badge-text); }
+.assistant-text.is-empty { color: var(--ink); font-weight: 600; }
+/* 準備執行的每一項都是一顆膠囊（外觀同步驟卡上的花費），顏色依主動程度：
+   1 被動＝橘、2 語音提醒＝綠、3 詢問後＝藍、4 直接＝紫。 */
+.assistant-queue { display: flex; gap: 6px; align-items: center; min-width: 0; overflow: hidden; }
+.queue-pill { flex-shrink: 0; padding: 4px 10px; border: 1px solid; border-radius: 99px; font-size: var(--assistant-pill-size); font-weight: 750; white-space: nowrap; }
+.queue-pill.level-1 { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.queue-pill.level-2 { color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
+.queue-pill.level-3 { color: var(--proactive-text); border-color: var(--proactive-border); background: var(--proactive-bg); }
+.queue-pill.level-4 { color: var(--direct-text); border-color: var(--direct-border); background: var(--direct-bg); }
+.queue-more { flex-shrink: 0; color: var(--muted); font-size: var(--assistant-pill-size); font-weight: 750; }
 
 .recipe-stage {
   display: grid;
@@ -332,6 +367,10 @@ button { color: inherit; }
   border-color: var(--helped-border);
   background: var(--helped-bg);
 }
+/* 依最近一次幫助的主動程度換色：1 被動＝橘（上面預設）、2 語音提醒＝綠、3 詢問後＝藍、4 直接＝紫。 */
+.action-card.helped[data-help-level="2"] { border-color: var(--reminder-border); background: var(--reminder-bg); }
+.action-card.helped[data-help-level="3"] { border-color: var(--proactive-border); background: var(--proactive-bg); }
+.action-card.helped[data-help-level="4"] { border-color: var(--direct-border); background: var(--direct-bg); }
 
 /* 現在該做的那一步：本頁還沒完成、編號最小的步驟，位置由程式決定。 */
 .action-card.active {
@@ -361,14 +400,15 @@ button { color: inherit; }
 .action-tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; justify-content: center; }
 .cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 「接受幫助」的記號，卡片最右邊那顆。 */
-.help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+.help-badge { font-size: var(--help-badge-size); line-height: 1.2; white-space: nowrap; }
 /* 有主動提議資格且未被拒絕的步驟；可能與 .help-badge 同時顯示。 */
-.proactive-badge { padding: 7px 11px; border-radius: 99px; color: var(--proactive-text); background: var(--proactive-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+.proactive-badge { font-size: var(--help-badge-size); line-height: 1.2; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
-.action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
+/* 🤖 標記不跟著變灰：濾鏡加在父層就無法由子層取消，所以右側標籤群改成逐顆套用，跳過 🤖。 */
+.action-card.done > :not(.action-tags),
+.action-card.done .action-tags > :not(.help-badge):not(.proactive-badge) { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
 /* 預覽走過的動作沿用正式完成的灰階外觀，但不會寫入 server 的 done。 */
-.action-card.preview-seen > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
 .preview-panel { display: grid; grid-template-rows: var(--preview-image-height) minmax(0, 1fr); min-height: 0; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: var(--panel-bg); }
 .image-slot { position: relative; height: 100%; min-height: 0; margin: 0; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--neutral-tint); }
@@ -390,34 +430,7 @@ button { color: inherit; }
 .detail-panel li:last-child { margin-bottom: 0; }
 .detail-panel li::before { position: absolute; top: .05em; left: 0; content: counter(detail-step, decimal-leading-zero); color: var(--blue-accent); font-size: .82em; font-weight: 800; letter-spacing: .08em; }
 
-/* 預覽提示刻意做成不遮住內容的小型 pop-out，左右兩區仍可完整看見。 */
-.preview-status {
-  position: fixed;
-  top: 18px;
-  left: 50%;
-  z-index: 25;
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  justify-content: center;
-  width: var(--preview-popup-width);
-  min-height: var(--preview-popup-height);
-  padding: 28px 44px;
-  color: var(--white);
-  border: 3px solid rgba(255, 255, 255, .32);
-  border-radius: 30px;
-  background: var(--ink);
-  box-shadow: 0 12px 32px rgba(20, 26, 18, .28);
-  font-size: var(--preview-popup-font-size);
-  letter-spacing: .04em;
-  transform: translateX(-50%);
-  animation: preview-status-in .2s ease;
-}
-.preview-status[hidden] { display: none; }
-@keyframes preview-status-in {
-  from { opacity: 0; transform: translate(-50%, -10px) scale(.98); }
-  to { opacity: 1; transform: translateX(-50%); }
-}
+
 /* ===== 接受幫助的說明卡：蓋滿整個畫面，期間不能換頁 ===== */
 
 .help-overlay {
@@ -582,7 +595,7 @@ button { color: inherit; }
 .offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); font-size: .95em; }
 
 @media (max-height: 760px) {
-  .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr); gap: 10px; padding: 10px 0; }
+  .app-shell { grid-template-rows: var(--top-panel-height-compact) var(--assistant-status-height) minmax(0, 1fr); gap: 10px; padding: 10px 0; }
   .stat-card { padding: 15px 22px; }
   .stage-title .meal-label { font-size: 1.5rem; }
   .stat-value { font-size: 1.8rem; }
@@ -600,6 +613,11 @@ button { color: inherit; }
     --help-card-legend-size: 1rem;
     --help-card-cost-label-size: 1.35rem;
     --help-card-cost-size: 2.8rem;
+    --assistant-status-height: 52px;
+    --assistant-padding: 0 22px;
+    --assistant-label-size: 1.15rem;
+    --assistant-text-size: 1.15rem;
+    --assistant-pill-size: .95rem;
   }
 }
 

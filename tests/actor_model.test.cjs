@@ -13,6 +13,8 @@ const slides = [{ step: "1", meal: "蛋糕", stage: "製作", actions: [
 const initial = { currentIndex: 0, helpOverlay: null, proactiveOverlay: null, helpModes: {}, helpDetails: {}, proactive: {} };
 const view = (state, data = slides) => window.ActorModel.view(state, data, window.ACTOR_SPEECH);
 assert.equal(view(initial), null);
+assert.equal(view({ ...initial, actorOverlay: null, helpOverlay: "0:0" }), null);
+assert.equal(view({ ...initial, actorOverlay: { key: "0:0", proactive: false, mode: "voice_reminder", details: [1] } }).kind, "voice_reminder");
 for (const code of ["unrecognized", "prerequisite", "stage"]) {
   assert.equal(view({ ...initial, actorError: code }).message, window.ACTOR_SPEECH.explanation[code]);
 }
@@ -46,7 +48,7 @@ assert.deepEqual(toggled.lines.map(line => [line.label, line.text]), [["動作 0
 assert.deepEqual(toggled.details.map(detail => detail.selected), [true, false]);
 assert.deepEqual(view({ ...reminderState, helpDetails: { "0:0": [] } }).lines, []);
 assert.equal(view({ ...reminderState, helpDetails: {} }).lines.length, 2);
-assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].text, "：正在執行步驟A");
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].text, window.ACTOR_SPEECH.physical[0].text.replace("{step}", "A"));
 const inquiry = { ...initial, proactiveOverlay: "0:0", helpDetails: { "0:0": [0] } };
 assert.deepEqual(view(inquiry).lines.map(x => x.active), [true, false, false, false]);
 assert.deepEqual(view(inquiry).details.map(x => x.selected), [false, true], "Proactive scope comes from Excel");
@@ -62,7 +64,7 @@ const executed = view({ ...initial, helpOverlay: "0:0", helped: { "0:0": 2 } });
 assert.equal(executed.cost, 2);
 assert.equal(executed.costLabel, "本次花費");
 assert.equal(direct.answer, null, "Direct intervention does not wait for permission");
-assert.equal(direct.lines[0].text, "：正在執行步驟B");
+assert.equal(direct.lines[0].text, window.ACTOR_SPEECH.direct[0].text.replace("{step}", "B"));
 assert.deepEqual(view({ ...initial, proactiveOverlay: "0:1", proactive: { "0:1": { status: "declined" } } }).lines.map(x => x.active), [false, false, true]);
 assert.equal(view({ ...voiceState, currentIndex: 99 }).name, "攪拌", "Read the overlay's page, not the browsed page");
 console.log("Actor model checks passed: voice, physical, inquiry, direct, selections, waiting, and no state mutation");

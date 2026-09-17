@@ -18,10 +18,12 @@ const SHOW_STEP_COST = false;
 // false ＝ 整行（標題與數字）都不出現，參與者只看得到「剩餘可指揮助手點數」。
 // 只影響參與者畫面；控制台永遠看得到這個數字。
 const SHOW_PROACTIVE_POINTS = true;
+// 右側步驟卡「🤖 主動」標籤什麼時候出現。
+// true  ＝ 事先就標出所有有主動介入（Excel「介入」欄標 O）的步驟，拒絕後才隱藏。
+// false ＝ 事先不標，參與者接受主動介入之後才出現（跟「🤖 介入」一樣是事後標記）。
+const SHOW_PROACTIVE_BADGE = false;
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
-// 「預覽全部步驟」每個步驟停留的毫秒數；2000 ＝ 2 秒。
-const PREVIEW_STEP_MS = 2000;
 // 右側主步驟：單欄放不下時最多改成兩欄。每欄至少保留這個寬度，
 // 避免在較窄的視窗裡硬切兩欄，反而讓文字大量換行。
 const MAX_ACTION_COLUMNS = 2;
@@ -30,8 +32,13 @@ const MIN_ACTION_COLUMN_WIDTH = 420;
 // 說明卡（整頁那張）與左下角的「詳細步驟」各有各的上限。
 const MAX_HELP_COLUMNS = 3;
 const MAX_DETAIL_COLUMNS = 2;
+// 中間「Alex準備執行」最多列出幾項，超過的接「…」。
+const MAX_QUEUE_ITEMS = 3;
+// 佇列膠囊的顏色依主動程度：1 被動＝橘、2 語音提醒＝綠、3 詢問後＝藍、4 直接＝紫。
+const QUEUE_LEVELS = { physical: "1", voice: "1", voice_reminder: "2", inquiry: "3", direct: "4" };
 const {
   actionKey, formatPoints, cleanLabel, pickedDetails, proactiveDetails, proactiveLevel, proactiveCost,
+  helpOverlayEntry,
 } = window.WozFormat;
 
 // Client 右側主步驟使用英文字母編號：A, B, ... Z, AA, AB ...。
@@ -68,7 +75,6 @@ const elements = {
   imagePlaceholder: document.querySelector("#image-placeholder"),
   fullscreenButton: document.querySelector("#fullscreen-button"),
   fullscreenLabel: document.querySelector("#fullscreen-label"),
-  previewStatus: document.querySelector("#preview-status"),
   helpOverlay: document.querySelector("#help-overlay"),
   helpCard: document.querySelector("#help-overlay .help-card"),
   helpOverlayBody: document.querySelector("#help-overlay-body"),
@@ -81,9 +87,10 @@ const elements = {
   helpOverlayList: document.querySelector("#help-overlay-list"),
   helpOverlayEmpty: document.querySelector("#help-overlay-empty"),
   helpOverlayLegend: document.querySelector("#help-overlay-legend"),
-  helpOverlayLegendText: document.querySelector("#help-overlay-legend-text"),
   helpOverlayCostLabel: document.querySelector("#help-overlay-cost-label"),
   helpOverlayCost: document.querySelector("#help-overlay-cost"),
+  assistantCurrent: document.querySelector("#assistant-current"),
+  assistantQueue: document.querySelector("#assistant-queue"),
   offlineBanner: document.querySelector("#offline-banner"),
 };
 
@@ -92,11 +99,6 @@ let currentIndex = 0;
 let renderedIndex = -1;
 // 上一次自動捲動時對準的步驟，避免只是點數變動也把畫面拉走。
 let scrolledStepIndex = -1;
-// 上一次看到的 previewNonce；變動時從本頁第一個動作開始預覽。
-let lastPreviewNonce = null;
-let previewRunId = 0;
-let isPreviewing = false;
-let previewSeenCount = 0;
 // Wizard 指定暫時查看的步驟；null 時跟隨最小的未完成步驟。
 let clientViewKey = null;
 // 目前預覽中的步驟（滑鼠移入的那個，或現在該做的那一步）。
@@ -107,49 +109,56 @@ let helpedKeys = new Set();
 let proactiveAcceptedKeys = new Set();
 // 拒絕後隱藏「🤖 主動」；取消拒絕或改為接受時會重新顯示。
 let proactiveDeclinedKeys = new Set();
+// 被幫助過的步驟 -> 最近一次幫助的主動程度（"1"～"4"），決定卡片底色。
+let helpLevels = new Map();
 // 正在顯示說明卡的步驟（"slideIdx:actionIdx"），沒有就是 null。
 let overlayKey = null;
-let lastProactiveOverlayKey = null;
+let lastProactiveNotificationKey = null;
 let hasReceivedOverlayState = false;
-let lastSoundPreviewNonce = null;
 let audioContext = null;
+// 將提示音檔放在 client/audio/ding.mp3。
+const NOTIFICATION_SOUND_URL = "/client/audio/ding.mp3";
+let notificationSoundBuffer = null;
 
-// Client 的全螢幕點擊也是音效啟用手勢；Wizard 可在之後遠端控制開關與音色。
+function loadNotificationSound() {
+  if (!audioContext) return Promise.resolve(null);
+  notificationSoundBuffer ||= fetch(NOTIFICATION_SOUND_URL)
+    .then((response) => {
+      if (!response.ok) throw new Error(`提示音載入失敗：HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((data) => audioContext.decodeAudioData(data))
+    .catch((error) => {
+      notificationSoundBuffer = null;
+      console.warn("無法載入提示音，請確認 client/audio/ding.mp3 已放置", error);
+      return null;
+    });
+  return notificationSoundBuffer;
+}
+
+// Client 的全螢幕點擊也是音效啟用手勢；Wizard 可在之後遠端控制開關。
 function unlockAudio() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return;
   try {
     audioContext ||= new AudioContextClass();
+    loadNotificationSound();
     audioContext.resume().catch((error) => console.warn("無法啟用主動介入提示音", error));
   } catch (error) {
     console.warn("無法啟用主動介入提示音", error);
   }
 }
 
-// 無額外音檔的三種短提示；試聽與主動介入共用同一套聲音。
-function playNotificationSound(preset) {
+// 主動介入播放 MP3；Client 必須先透過全螢幕點擊啟用音效。
+async function playNotificationSound() {
   if (audioContext?.state !== "running") return;
-  const notes = {
-    ding: [[784, 0, 0.28, "sine", 0.12]],
-    chime: [[660, 0, 0.20, "sine", 0.12], [880, 0.16, 0.20, "sine", 0.12]],
-    beep: [[740, 0, 0.14, "square", 0.055]],
-  }[preset] || [[660, 0, 0.20, "sine", 0.12], [880, 0.16, 0.20, "sine", 0.12]];
-  const start = audioContext.currentTime;
-  notes.forEach(([frequency, offset, duration, type, volume]) => {
-    const at = start + offset;
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    oscillator.type = type;
-    oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(volume, at + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-    oscillator.connect(gain);
-    gain.connect(audioContext.destination);
-    oscillator.start(at);
-    oscillator.stop(at + duration + 0.01);
-    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-  });
+  const buffer = await loadNotificationSound();
+  if (!buffer || audioContext.state !== "running") return;
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioContext.destination);
+  source.onended = () => source.disconnect();
+  source.start();
 }
 
 // 兩個點數池各自獨立：可指揮助手＝參與者自己要求的幫助，
@@ -392,9 +401,36 @@ function syncBadge(button, className, text, on) {
 }
 
 function syncHelpBadges(button, key, action) {
-  syncBadge(button, "help-badge", "🤖 介入", helpedKeys.has(key));
-  syncBadge(button, "proactive-badge", "🤖 主動",
-    proactiveDetails(action).length > 0 && !proactiveDeclinedKeys.has(key));
+  syncBadge(button, "help-badge", "🤖", helpedKeys.has(key));
+  syncBadge(button, "proactive-badge", "🤖",
+    SHOW_PROACTIVE_BADGE
+      ? proactiveDetails(action).length > 0 && !proactiveDeclinedKeys.has(key)
+      : proactiveAcceptedKeys.has(key));
+}
+
+// 被幫助過的卡片依最近一次幫助的主動程度換底色（見 CSS 的 data-help-level）。
+function syncHelpedCard(button, key) {
+  const level = helpLevels.get(key);
+  button.classList.toggle("helped", Boolean(level));
+  if (level) button.dataset.helpLevel = level;
+  else delete button.dataset.helpLevel;
+}
+
+// 依帳本順序走一遍，後面的覆蓋前面的＝每個步驟最近一次幫助的主動程度。
+// 1 被動（實體／語音）、2 語音提醒、3 詢問後介入、4 直接介入；主動提議只算已接受的。
+function buildHelpLevels(state) {
+  const levels = new Map();
+  (state.ledger || []).forEach((entry) => {
+    if (!entry.key) return;
+    if (entry.kind === "help") {
+      levels.set(entry.key, entry.helpMode === "voice_reminder" ? "2" : "1");
+    } else if (entry.kind === "proactive" && state.proactive?.[entry.key]?.status === "accepted") {
+      const [slideIndex, actionIndex] = entry.key.split(":").map(Number);
+      const action = slides[slideIndex]?.actions[actionIndex];
+      levels.set(entry.key, proactiveLevel(action).startsWith("4.") ? "4" : "3");
+    }
+  });
+  return levels;
 }
 
 function renderActions(slide) {
@@ -407,10 +443,10 @@ function renderActions(slide) {
     button.tabIndex = -1;
     button.className = "action-card";
     button.addEventListener("mouseenter", () => {
-      if (!isPreviewing && !clientViewKey) showStep(index);
+      if (!clientViewKey) showStep(index);
     });
     button.classList.toggle("done", doneKeys.has(key));
-    button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
+    syncHelpedCard(button, key);
 
     const number = document.createElement("span");
     number.className = "action-number";
@@ -446,7 +482,7 @@ function syncActionStates() {
   [...elements.actionList.children].forEach((button, index) => {
     const key = actionKey(currentIndex, index);
     button.classList.toggle("done", doneKeys.has(key));
-    button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
+    syncHelpedCard(button, key);
     syncHelpBadges(button, key, slides[currentIndex].actions[index]);
   });
   fitActionColumns();
@@ -454,21 +490,6 @@ function syncActionStates() {
   updateCosts();
   highlightCurrentStep();
   autoScroll(false);
-  if (isPreviewing) applyPreviewStep(previewSeenCount);
-}
-
-function wait(milliseconds) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-}
-
-function applyPreviewStep(actionIndex) {
-  [...elements.actionList.children].forEach((button, index) => {
-    button.classList.remove("client-view");
-    button.classList.toggle("preview-seen", index < actionIndex);
-    button.classList.toggle("active", index === actionIndex);
-  });
-  showStep(actionIndex);
-  requestAnimationFrame(() => scrollToPreviewStep(actionIndex));
 }
 
 function applyClientView() {
@@ -484,48 +505,10 @@ function applyClientView() {
     button.classList.toggle("client-view", valid && index === actionIndex);
     if (valid) button.classList.remove("active");
   });
-  if (!valid || isPreviewing) return;
+  if (!valid) return;
 
   showStep(actionIndex);
   requestAnimationFrame(() => scrollToPreviewStep(actionIndex));
-}
-
-function restoreAfterPreview() {
-  isPreviewing = false;
-  previewSeenCount = 0;
-  elements.previewStatus.hidden = true;
-  [...elements.actionList.children].forEach((button) => button.classList.remove("preview-seen"));
-  highlightCurrentStep();
-  autoScroll(true);
-  applyClientView();
-}
-
-function stopPreview() {
-  previewRunId += 1;
-  if (isPreviewing) restoreAfterPreview();
-}
-
-async function previewAllSteps(nonce) {
-  const actions = slides[currentIndex]?.actions || [];
-  if (!actions.length) return;
-
-  // 新指令會使上一輪自然失效，因此重按按鈕可以直接從頭開始。
-  const runId = ++previewRunId;
-  isPreviewing = true;
-  previewSeenCount = 0;
-  elements.previewStatus.hidden = false;
-
-  for (let index = 0; index < actions.length; index += 1) {
-    if (runId !== previewRunId) return;
-    previewSeenCount = index;
-    applyPreviewStep(index);
-    await wait(PREVIEW_STEP_MS);
-  }
-
-  if (runId !== previewRunId) return;
-  // 最後一步停滿設定時間後結束，畫面回到正式的完成狀態與目前步驟。
-  restoreAfterPreview();
-  window.WozStore.dispatch({ type: "finishPreview", nonce });
 }
 
 // 這一頁的階段圖示。檔名依序試「頁碼」→「餐點-階段」→「階段」，
@@ -592,19 +575,33 @@ function updateHelpCardWidth(detailCount) {
   elements.helpCard.style.setProperty("--help-card-auto-width", `${width}px`);
 }
 
+function proactiveNotificationKey(state) {
+  if (state.proactiveOverlay) return `proposal:${state.proactiveOverlay}`;
+  const key = state.helpOverlay;
+  if (!key) return null;
+  // 同一步驟連續執行模式 2 也要播放；使用本次帳目識別執行。
+  const entry = helpOverlayEntry(state);
+  if ((entry?.helpMode || state.helpModes?.[key]) !== "voice_reminder") return null;
+  return `reminder:${key}:${entry?.id || entry?.run || ""}`;
+}
+
 // 整頁的卡片有兩種，共用同一塊 DOM（畫面上同時只會有一張，server 保證互斥）：
 //   assist    ＝ wizard 勾「接受幫助」時浮出來的說明卡，代勞範圍由控制台的勾選決定。
-//   proactive ＝ 助手主動提議卡，代勞範圍寫死在 Excel 的「介入」欄，參與者可以不接受。
+//   proactive ＝ 模式 2 語音提醒建議，以及模式 3、4 主動實體介入。
+// 模式 2 使用 Wizard 勾選範圍；模式 3、4 的範圍由 Excel 決定。
 // 兩種出現期間參與者都不能換頁（見 moveSlide），要先看完。
 function syncHelpOverlay(state) {
   // 主動提議卡優先：server 只會設其中一個，這裡的順序只是防呆。
   const proactiveKey = state.proactiveOverlay || null;
+  const notificationKey = proactiveNotificationKey(state);
   const newlyOpenedProactive = hasReceivedOverlayState
-    && proactiveKey && proactiveKey !== lastProactiveOverlayKey;
-  lastProactiveOverlayKey = proactiveKey;
+    && notificationKey && notificationKey !== lastProactiveNotificationKey;
+  lastProactiveNotificationKey = notificationKey;
   hasReceivedOverlayState = true;
   const key = proactiveKey || state.helpOverlay || null;
-  const isReminder = !proactiveKey && state.helpModes?.[key] === "voice_reminder";
+  const entry = proactiveKey ? null : helpOverlayEntry(state);
+  const helpMode = entry?.helpMode || state.helpModes?.[key] || "physical";
+  const isReminder = !proactiveKey && helpMode === "voice_reminder";
   const mode = proactiveKey || isReminder ? "proactive" : "assist";
   // 卡片指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
   const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
@@ -619,17 +616,18 @@ function syncHelpOverlay(state) {
   elements.helpOverlay.dataset.mode = mode;
   elements.helpOverlay.dataset.interventionLevel = isProposal
     ? (proactiveLevel(action).startsWith("4.") ? "4" : "3")
-    : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
+    : (isReminder ? "2" : "1");
 
   const details = action.details || [];
   updateHelpCardWidth(details.length);
   // 主動提議的範圍來自 Excel，不看 helpDetails；兩種幫助各自獨立。
   const picked = new Set(
-    isProposal ? proactiveDetails(action) : pickedDetails(state, key, details.length),
+    isProposal ? proactiveDetails(action)
+      : (entry?.selectedDetails || pickedDetails(state, key, details.length)),
   );
 
   elements.helpOverlayStep.textContent = `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`;
-  const interventionMode = state.helpModes?.[key] || "physical";
+  const interventionMode = helpMode;
   const interventionTitles = {
     physical: "實體介入（1. 由您指揮Alex）",
     voice: "語音介入（1. 由您指揮Alex）",
@@ -664,21 +662,56 @@ function syncHelpOverlay(state) {
   elements.helpOverlayEmpty.hidden = details.length > 0;
   // 圖例只在真的有灰字時才出現；整步驟都由助手做的話沒什麼好對照的。
   elements.helpOverlayLegend.hidden = picked.size === details.length;
-  elements.helpOverlayLegendText.textContent = isProposal
-    ? "動作助手可以幫您完成"
-    : "動作將由助手介入";
+  const legendOn = document.createElement("span");
+  legendOn.className = "legend-on";
+  legendOn.textContent = "黑色字體";
+  const legendText = isProposal || interventionMode === "physical"
+    ? "動作將由助手實體介入，其餘則由您獨立完成"
+    : "動作將由助手語音介入、所有動作皆須由您完成";
+  elements.helpOverlayLegend.replaceChildren(legendOn, document.createTextNode(legendText));
 
   // 還沒回答的提議寫「接受將花費」，其他情況都是已經確定的金額。
   elements.helpOverlayCostLabel.textContent = isProposal && !answer ? "接受將花費" : "本次花費";
   const cost = isProposal
     ? (state.proactive?.[key]?.cost ?? proactiveCost(action))
-    : state.helped?.[key];
+    : (entry ? (entry.originalCost ?? -entry.delta) : state.helped?.[key]);
   elements.helpOverlayCost.textContent = cost == null ? "—" : formatPoints(cost);
 
   fitHelpColumns();
   if (newlyOpenedProactive && state.soundEnabled !== false) {
-    playNotificationSound(state.soundPreset);
+    playNotificationSound();
   }
+}
+
+// 佇列項目不一定在目前這一頁，所以一律從 key 反查。
+function assistantItemLabel(item, withName) {
+  const [slideIndex, actionIndex] = item.key.split(":").map(Number);
+  const slide = slides[slideIndex];
+  const action = slide?.actions[actionIndex];
+  if (!action) return "";
+  const label = `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`;
+  return withName ? `${label} - ${action.name}` : label;
+}
+
+function syncAssistantStatus(state) {
+  const current = state.assistantCurrent;
+  const currentText = current ? assistantItemLabel(current, true) : "";
+  elements.assistantCurrent.textContent = currentText || "無";
+  elements.assistantCurrent.title = currentText;
+  elements.assistantCurrent.classList.toggle("is-empty", !currentText);
+
+  const queue = (state.assistantQueue || []).filter((item) => assistantItemLabel(item, false));
+  const pills = queue.slice(0, MAX_QUEUE_ITEMS).map((item) => Object.assign(document.createElement("span"), {
+    className: `queue-pill level-${QUEUE_LEVELS[item.mode] || "1"}`,
+    textContent: assistantItemLabel(item, false),
+  }));
+  if (queue.length > MAX_QUEUE_ITEMS) {
+    pills.push(Object.assign(document.createElement("span"), { className: "queue-more", textContent: "…" }));
+  }
+  if (!pills.length) {
+    pills.push(Object.assign(document.createElement("span"), { className: "assistant-text is-empty", textContent: "無" }));
+  }
+  elements.assistantQueue.replaceChildren(...pills);
 }
 
 function applyState(state) {
@@ -695,22 +728,11 @@ function applyState(state) {
       .filter(([, entry]) => entry?.status === "declined")
       .map(([key]) => key),
   );
+  helpLevels = buildHelpLevels(state);
   clientViewKey = state.clientViewKey || null;
   const clientViewEnded = Boolean(previousClientViewKey) && !clientViewKey;
 
-  const previewNonce = state.previewNonce ?? 0;
-  const previewChanged = lastPreviewNonce !== null && previewNonce !== lastPreviewNonce;
-  const previewRequested = Boolean(state.previewActive)
-    && (lastPreviewNonce === null || previewChanged);
-  const previewStopped = !state.previewActive && previewChanged;
-  lastPreviewNonce = previewNonce;
-
   const nextIndex = Math.max(0, Math.min(slides.length - 1, state.currentIndex));
-  // wizard 若在播放途中切頁，就結束舊頁預覽，避免舊計時器操作新頁的 DOM。
-  if (isPreviewing && nextIndex !== currentIndex) {
-    previewRunId += 1;
-    restoreAfterPreview();
-  }
   currentIndex = nextIndex;
 
   if (currentIndex !== renderedIndex) {
@@ -719,22 +741,16 @@ function applyState(state) {
     syncActionStates();
   }
 
+  syncAssistantStatus(state);
   syncHelpOverlay(state);
-  const soundPreviewNonce = state.soundPreviewNonce ?? 0;
-  if (lastSoundPreviewNonce !== null && soundPreviewNonce !== lastSoundPreviewNonce) {
-    playNotificationSound(state.soundPreset);
-  }
-  lastSoundPreviewNonce = soundPreviewNonce;
-  if (previewStopped) stopPreview();
-  if (previewRequested) previewAllSteps(previewNonce);
-  if (!previewRequested) applyClientView();
+  applyClientView();
   // 「回到目前步驟」即使目標沒變，也要把參與者手動捲走的列表重新定位。
-  if (clientViewEnded && !state.previewActive) autoScroll(true);
+  if (clientViewEnded) autoScroll(true);
 }
 
 function moveSlide(direction) {
   // 說明卡蓋著的時候不能用方向鍵換頁，要先看完再說。
-  if (overlayKey || isPreviewing) return;
+  if (overlayKey) return;
   const nextIndex = Math.max(0, Math.min(slides.length - 1, currentIndex + direction));
   if (nextIndex === currentIndex) return;
   // 換頁一樣寫回 server，wizard 的頁面切換器才會跟著動。
@@ -743,7 +759,7 @@ function moveSlide(direction) {
 
 // 滑鼠離開整個列表就切回現在該做的那一步。
 elements.actionList.addEventListener("mouseleave", () => {
-  if (!isPreviewing && !clientViewKey) showStep(pinnedIndex());
+  if (!clientViewKey) showStep(pinnedIndex());
 });
 // 圖片壞掉（檔名對但檔案有問題）時退回預留版位，不要留一個破圖。
 elements.stepImage.addEventListener("error", () => {
