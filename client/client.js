@@ -18,6 +18,10 @@ const SHOW_STEP_COST = false;
 // false ＝ 整行（標題與數字）都不出現，參與者只看得到「剩餘可指揮助手點數」。
 // 只影響參與者畫面；控制台永遠看得到這個數字。
 const SHOW_PROACTIVE_POINTS = true;
+// 右側步驟卡「🤖 主動」標籤什麼時候出現。
+// true  ＝ 事先就標出所有有主動介入（Excel「介入」欄標 O）的步驟，拒絕後才隱藏。
+// false ＝ 事先不標，參與者接受主動介入之後才出現（跟「🤖 介入」一樣是事後標記）。
+const SHOW_PROACTIVE_BADGE = false;
 // 自動捲動時，「現在該做的那一步」上方最多保留幾個已完成的步驟。
 const MAX_DONE_ABOVE = 2;
 // 右側主步驟：單欄放不下時最多改成兩欄。每欄至少保留這個寬度，
@@ -105,6 +109,8 @@ let helpedKeys = new Set();
 let proactiveAcceptedKeys = new Set();
 // 拒絕後隱藏「🤖 主動」；取消拒絕或改為接受時會重新顯示。
 let proactiveDeclinedKeys = new Set();
+// 被幫助過的步驟 -> 最近一次幫助的主動程度（"1"～"4"），決定卡片底色。
+let helpLevels = new Map();
 // 正在顯示說明卡的步驟（"slideIdx:actionIdx"），沒有就是 null。
 let overlayKey = null;
 let lastProactiveNotificationKey = null;
@@ -395,9 +401,36 @@ function syncBadge(button, className, text, on) {
 }
 
 function syncHelpBadges(button, key, action) {
-  syncBadge(button, "help-badge", "🤖 介入", helpedKeys.has(key));
-  syncBadge(button, "proactive-badge", "🤖 主動",
-    proactiveDetails(action).length > 0 && !proactiveDeclinedKeys.has(key));
+  syncBadge(button, "help-badge", "🤖", helpedKeys.has(key));
+  syncBadge(button, "proactive-badge", "🤖",
+    SHOW_PROACTIVE_BADGE
+      ? proactiveDetails(action).length > 0 && !proactiveDeclinedKeys.has(key)
+      : proactiveAcceptedKeys.has(key));
+}
+
+// 被幫助過的卡片依最近一次幫助的主動程度換底色（見 CSS 的 data-help-level）。
+function syncHelpedCard(button, key) {
+  const level = helpLevels.get(key);
+  button.classList.toggle("helped", Boolean(level));
+  if (level) button.dataset.helpLevel = level;
+  else delete button.dataset.helpLevel;
+}
+
+// 依帳本順序走一遍，後面的覆蓋前面的＝每個步驟最近一次幫助的主動程度。
+// 1 被動（實體／語音）、2 語音提醒、3 詢問後介入、4 直接介入；主動提議只算已接受的。
+function buildHelpLevels(state) {
+  const levels = new Map();
+  (state.ledger || []).forEach((entry) => {
+    if (!entry.key) return;
+    if (entry.kind === "help") {
+      levels.set(entry.key, entry.helpMode === "voice_reminder" ? "2" : "1");
+    } else if (entry.kind === "proactive" && state.proactive?.[entry.key]?.status === "accepted") {
+      const [slideIndex, actionIndex] = entry.key.split(":").map(Number);
+      const action = slides[slideIndex]?.actions[actionIndex];
+      levels.set(entry.key, proactiveLevel(action).startsWith("4.") ? "4" : "3");
+    }
+  });
+  return levels;
 }
 
 function renderActions(slide) {
@@ -413,7 +446,7 @@ function renderActions(slide) {
       if (!clientViewKey) showStep(index);
     });
     button.classList.toggle("done", doneKeys.has(key));
-    button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
+    syncHelpedCard(button, key);
 
     const number = document.createElement("span");
     number.className = "action-number";
@@ -449,7 +482,7 @@ function syncActionStates() {
   [...elements.actionList.children].forEach((button, index) => {
     const key = actionKey(currentIndex, index);
     button.classList.toggle("done", doneKeys.has(key));
-    button.classList.toggle("helped", helpedKeys.has(key) || proactiveAcceptedKeys.has(key));
+    syncHelpedCard(button, key);
     syncHelpBadges(button, key, slides[currentIndex].actions[index]);
   });
   fitActionColumns();
@@ -695,6 +728,7 @@ function applyState(state) {
       .filter(([, entry]) => entry?.status === "declined")
       .map(([key]) => key),
   );
+  helpLevels = buildHelpLevels(state);
   clientViewKey = state.clientViewKey || null;
   const clientViewEnded = Boolean(previousClientViewKey) && !clientViewKey;
 

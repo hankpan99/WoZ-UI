@@ -60,7 +60,7 @@
   --plate-shadow: rgba(55, 67, 51, .1);
 
   /* ===== 常用版面設定：請從這裡調整 ===== */
-  --top-panel-height: 200px;
+  --top-panel-height: 180px;
   --top-panel-height-compact: 118px;
   --fullscreen-width: 76px;
   --cost-panel-width: 1fr;
@@ -94,6 +94,8 @@
   --step-name-size: 2rem;
   --step-index-size: 1.5rem;
   --cost-size: 1.5rem;
+  /* 步驟卡右側「🤖」標記（介入／主動）的大小 */
+  --help-badge-size: 1.2rem;
   --action-gap: 16px;
   /* 主畫面左側維持原本在 1440px 版面下約 610px 的寬度；
      更寬的螢幕把新增空間留給右側步驟。 */
@@ -365,6 +367,10 @@ button { color: inherit; }
   border-color: var(--helped-border);
   background: var(--helped-bg);
 }
+/* 依最近一次幫助的主動程度換色：1 被動＝橘（上面預設）、2 語音提醒＝綠、3 詢問後＝藍、4 直接＝紫。 */
+.action-card.helped[data-help-level="2"] { border-color: var(--reminder-border); background: var(--reminder-bg); }
+.action-card.helped[data-help-level="3"] { border-color: var(--proactive-border); background: var(--proactive-bg); }
+.action-card.helped[data-help-level="4"] { border-color: var(--direct-border); background: var(--direct-bg); }
 
 /* 現在該做的那一步：本頁還沒完成、編號最小的步驟，位置由程式決定。 */
 .action-card.active {
@@ -394,11 +400,13 @@ button { color: inherit; }
 .action-tags { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; justify-content: center; }
 .cost-pill { padding: 7px 11px; border-radius: 99px; color: var(--cost-text); background: var(--cost-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
 /* 「接受幫助」的記號，卡片最右邊那顆。 */
-.help-badge { padding: 7px 11px; border-radius: 99px; color: var(--helped-badge-text); background: var(--helped-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+.help-badge { font-size: var(--help-badge-size); line-height: 1.2; white-space: nowrap; }
 /* 有主動提議資格且未被拒絕的步驟；可能與 .help-badge 同時顯示。 */
-.proactive-badge { padding: 7px 11px; border-radius: 99px; color: var(--proactive-text); background: var(--proactive-badge-bg); font-size: var(--cost-size); font-weight: 750; white-space: nowrap; }
+.proactive-badge { font-size: var(--help-badge-size); line-height: 1.2; white-space: nowrap; }
 /* 已完成的步驟：整張卡的內容轉成灰階並降低對比 */
-.action-card.done > * { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
+/* 🤖 標記不跟著變灰：濾鏡加在父層就無法由子層取消，所以右側標籤群改成逐顆套用，跳過 🤖。 */
+.action-card.done > :not(.action-tags),
+.action-card.done .action-tags > :not(.help-badge):not(.proactive-badge) { filter: grayscale(var(--done-grayscale)); opacity: var(--done-opacity); }
 
 /* 預覽走過的動作沿用正式完成的灰階外觀，但不會寫入 server 的 done。 */
 
