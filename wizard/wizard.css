@@ -43,7 +43,6 @@
   --shadow: rgba(34, 40, 30, .07);
 
   /* 版面 */
-  --top-height: 74px;
   --points-panel-width: 400px;
 
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
@@ -53,7 +52,7 @@
 
 body {
   display: grid;
-  grid-template-rows: var(--top-height) auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
   gap: 12px;
   height: 100vh;
@@ -71,62 +70,82 @@ h2, h3 { margin: 0; }
 
 .wizard-top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
   gap: 20px;
   align-items: center;
-  padding: 0 16px;
+  padding: 10px 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--white);
   box-shadow: 0 4px 14px var(--shadow);
 }
 
-.page-switcher { display: flex; gap: 8px; align-items: center; }
-.page-toggle { display: flex; gap: 4px; }
+/* min-width: 0 讓這一欄在螢幕不夠寬時可以縮小，改成自己橫向捲動，
+   而不是把 wizard-top 撐爆、被外層 body 的 overflow:hidden 直接裁掉。 */
+.page-switcher { display: flex; gap: 8px; align-items: center; min-width: 0; overflow-x: auto; }
+/* conn 現在跟 page-switcher 共用剩下的那一欄，靠右對齊撐到最右邊。 */
+.conn { justify-self: end; }
+/* 左半邊＝第 1~9 頁、右半邊＝其餘頁面，各自維持原本的分行；
+   中間留白隔開，讓兩邊看起來是分開的兩組。 */
+.page-toggle { display: flex; gap: 28px; }
+.page-toggle-col + .page-toggle-col { padding-left: 24px; border-left: 1px solid var(--line); }
+.page-toggle-col { display: flex; flex-direction: column; gap: 4px; }
+.page-toggle-row { display: flex; gap: 4px; }
 
 .page-button {
   position: relative;
-  width: 38px;
-  height: 40px;
-  padding: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 136px;
+  min-height: 36px;
+  padding: 3px 5px;
   border: 1px solid var(--line);
   border-radius: 9px;
   background: var(--white);
-  font-size: .95rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: background .15s ease, border-color .15s ease, color .15s ease;
 }
+.page-button-index {
+  flex: none;
+  font-size: .92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: .7;
+}
+.page-button-label {
+  overflow: hidden;
+  min-width: 0;
+  font-size: .8rem;
+  font-weight: 650;
+  white-space: nowrap;
+  text-align: center;
+  text-overflow: ellipsis;
+}
 .page-button:hover { border-color: var(--blue); background: var(--blue-light); }
 .page-button.current { color: var(--white); border-color: var(--ink); background: var(--ink); }
-/* 已經有勾選紀錄的頁面：右上角一個小點 */
-.page-button.touched::after {
+/* 該頁動作全部完成：文字淡出，讓還沒做完的頁面比較顯眼；
+   淡出只套在文字上，不套在按鈕本身，這樣左上角的主動幫助紅點才不會被一起變灰。 */
+.page-button.stage-complete:not(.current) .page-button-index,
+.page-button.stage-complete:not(.current) .page-button-label {
+  filter: grayscale(.9);
+  opacity: .5;
+}
+/* 該頁還有主動幫助沒選「接受」或「拒絕」：左上角一個紅點 */
+.page-button.proactive-pending::before {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
+  top: 3px;
+  left: 3px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--blue-accent);
+  background: var(--minus);
+  box-shadow: 0 0 0 2px var(--white);
   content: "";
 }
-
-.page-arrow {
-  width: 34px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--white);
-  cursor: pointer;
-}
-.page-arrow:hover:not(:disabled) { background: var(--panel-bg); }
-.page-arrow:disabled { opacity: .3; cursor: not-allowed; }
-
-.page-meta { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
-.page-meta-index { color: var(--muted); font-size: .95rem; font-weight: 650; white-space: nowrap; }
-.page-meta-name { color: var(--blue); font-size: 1.25rem; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-button.proactive-pending.current::before { box-shadow: 0 0 0 2px var(--ink); }
 
 .conn { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: .88rem; font-weight: 650; white-space: nowrap; }
 .conn-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
@@ -601,7 +620,8 @@ h2, h3 { margin: 0; }
 
 @media (max-width: 1180px) {
   :root { --points-panel-width: 340px; }
-  .page-button { width: 32px; }
+  /* 按鈕維持不換行的寬度；螢幕真的不夠寬時讓 .page-switcher 自己橫向捲動，
+     不要硬壓縮按鈕寬度（那樣文字會被裁更多）。 */
 }
 
 @media (prefers-reduced-motion: reduce) {

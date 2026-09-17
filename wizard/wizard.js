@@ -9,10 +9,6 @@ const { dispatch } = window.WozStore;
 
 const elements = {
   pageToggle: document.querySelector("#page-toggle"),
-  pagePrev: document.querySelector("#page-prev"),
-  pageNext: document.querySelector("#page-next"),
-  pageMetaIndex: document.querySelector("#page-meta-index"),
-  pageMetaName: document.querySelector("#page-meta-name"),
   conn: document.querySelector("#conn"),
   connLabel: document.querySelector("#conn-label"),
   stepList: document.querySelector("#step-list"),
@@ -59,6 +55,30 @@ const pageLabel = (slide) => {
   return [meal, stage].filter(Boolean).join(" · ");
 };
 
+// 按鈕上顯示的名稱只簡化「餐點」這一段，方便一行放得下；
+// 完整名稱還是留在 title/aria-label 裡。
+const MEAL_SHORT_NAMES = {
+  巴斯克蛋糕: "蛋糕",
+  法式吐司: "吐司",
+  水果優格: "優格",
+};
+const STAGE_SHORT_NAMES = {
+  "拿用具、食材": "拿取",
+};
+const pageButtonLabel = (slide) => {
+  const meal = cleanLabel(slide.meal);
+  const stage = cleanLabel(slide.stage);
+  const shortMeal = MEAL_SHORT_NAMES[meal] || meal;
+  const shortStage = STAGE_SHORT_NAMES[stage] || stage;
+  return [shortMeal, shortStage].filter(Boolean).join(" - ");
+};
+
+// 頁碼按鈕要排成 4 行；目前 20 個階段是照這個順序寫死分行點
+// （第 4、8、15 頁之後另起一行）。之後食譜階段數變了要手動調整這裡。
+const PAGE_ROW_BREAKS = [4, 8, 15];
+// 第 1~8 頁放左半邊、其餘放右半邊（同樣是寫死，配合上面的分行點）。
+const PAGE_COLUMN_SPLIT_AFTER_STEP = 8;
+
 // Wizard 的主步驟與 Client 一致，使用 A, B, ... Z, AA ... 編號。
 function stepLabel(index) {
   let value = index + 1;
@@ -74,37 +94,77 @@ function stepLabel(index) {
 // ---- 頁面切換器 ----------------------------------------------------------
 
 function buildPageToggle() {
-  elements.pageToggle.replaceChildren(
-    ...slides.map((slide, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "page-button";
-      button.dataset.index = String(index);
-      button.textContent = slide.step;
-      button.title = pageLabel(slide) || `第 ${slide.step} 頁`;
-      button.setAttribute("aria-label", `第 ${slide.step} 頁：${pageLabel(slide)}`);
-      button.addEventListener("click", () => dispatch({ type: "setPage", index }));
-      return button;
-    }),
-  );
+  const columns = [];
+  let col = document.createElement("div");
+  col.className = "page-toggle-col";
+  columns.push(col);
+  let row = document.createElement("div");
+  row.className = "page-toggle-row";
+  col.append(row);
+
+  slides.forEach((slide, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "page-button";
+    button.dataset.index = String(index);
+    button.append(
+      Object.assign(document.createElement("span"), {
+        className: "page-button-index",
+        textContent: slide.step,
+      }),
+      Object.assign(document.createElement("span"), {
+        className: "page-button-label",
+        textContent: pageButtonLabel(slide) || "—",
+      }),
+    );
+    button.setAttribute("aria-label", `第 ${slide.step} 頁：${pageLabel(slide)}`);
+    button.addEventListener("click", () => dispatch({ type: "setPage", index }));
+    row.append(button);
+
+    const stepNum = Number(slide.step);
+    const isLast = index === slides.length - 1;
+    if (!isLast && (PAGE_ROW_BREAKS.includes(stepNum) || stepNum === PAGE_COLUMN_SPLIT_AFTER_STEP)) {
+      row = document.createElement("div");
+      row.className = "page-toggle-row";
+      if (stepNum === PAGE_COLUMN_SPLIT_AFTER_STEP) {
+        col = document.createElement("div");
+        col.className = "page-toggle-col";
+        columns.push(col);
+      }
+      col.append(row);
+    }
+  });
+
+  elements.pageToggle.replaceChildren(...columns);
 }
 
 function syncPageToggle(state) {
-  const touched = new Set(
-    [...state.done, ...Object.keys(state.helped || {})].map((key) => key.split(":")[0]),
-  );
-  [...elements.pageToggle.children].forEach((button, index) => {
-    button.classList.toggle("current", index === currentIndex);
-    button.classList.toggle("touched", touched.has(String(index)));
-    button.setAttribute("aria-pressed", String(index === currentIndex));
-  });
-  elements.pagePrev.disabled = currentIndex === 0;
-  elements.pageNext.disabled = currentIndex === slides.length - 1;
+  const doneSet = new Set(state.done);
+  const proactiveState = state.proactive || {};
 
-  const slide = slides[currentIndex];
-  elements.pageMetaIndex.textContent = `第 ${slide?.step ?? "?"} 頁`;
-  elements.pageMetaName.textContent = slide ? pageLabel(slide) : "";
-  elements.pageMetaName.title = slide ? pageLabel(slide) : "";
+  elements.pageToggle.querySelectorAll(".page-button").forEach((button) => {
+    const index = Number(button.dataset.index);
+    const slide = slides[index];
+    const actions = slide?.actions || [];
+
+    // 該頁的動作是否全部完成：全部完成就把文字淡出，讓還沒做完的頁面比較顯眼。
+    const allDone = actions.length > 0
+      && actions.every((_action, actionIndex) => doneSet.has(actionKey(index, actionIndex)));
+    // 該頁是否還有主動幫助沒選「接受」或「拒絕」。
+    const hasPendingProactive = actions.some((action, actionIndex) =>
+      proactiveDetails(action).length > 0
+      && !proactiveState[actionKey(index, actionIndex)]?.status);
+
+    button.classList.toggle("current", index === currentIndex);
+    button.classList.toggle("stage-complete", allDone);
+    button.classList.toggle("proactive-pending", hasPendingProactive);
+    button.setAttribute("aria-pressed", String(index === currentIndex));
+    button.title = [
+      pageLabel(slide) || `第 ${slide?.step ?? "?"} 頁`,
+      allDone ? "已全部完成" : null,
+      hasPendingProactive ? "有主動幫助待決定" : null,
+    ].filter(Boolean).join(" · ");
+  });
 }
 
 // ---- 步驟清單 ------------------------------------------------------------
@@ -779,13 +839,6 @@ function applyState(state) {
 }
 
 // ---- 事件 ----------------------------------------------------------------
-
-elements.pagePrev.addEventListener("click", () => {
-  dispatch({ type: "setPage", index: currentIndex - 1 });
-});
-elements.pageNext.addEventListener("click", () => {
-  dispatch({ type: "setPage", index: currentIndex + 1 });
-});
 
 function moveClientView(direction) {
   const state = window.WozStore.state;
