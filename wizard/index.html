@@ -39,6 +39,27 @@
         </div>
     </section>
 
+    <section class="panel assistant-queue-panel" aria-label="助手執行佇列">
+      <div class="assistant-queue-now">
+        <div class="assistant-queue-head">
+          <h2>Alex 正在執行</h2>
+          <div class="assistant-queue-actions">
+            <button class="ghost-button" id="assistant-done" type="button">完成</button>
+            <button class="ghost-button" id="assistant-stop" type="button" aria-expanded="false">喊停</button>
+          </div>
+        </div>
+        <div class="assistant-queue-current" id="assistant-current"></div>
+        <div class="assistant-stop-editor" id="assistant-stop-editor" hidden></div>
+      </div>
+      <div class="assistant-queue-next">
+        <div class="assistant-queue-head">
+          <h2>Alex 準備執行 <span class="panel-count" id="assistant-queue-count">0 項</span></h2>
+          <span class="assistant-busy-hint" id="assistant-busy-hint" hidden>Alex 正在執行中：關閉字卡後項目會留在佇列最前面，之後需再開一次字卡</span>
+        </div>
+        <ol class="assistant-queue-list" id="assistant-queue-list"></ol>
+      </div>
+    </section>
+
     <main class="wizard-body">
       <section class="panel steps-panel">
         <div class="panel-head">

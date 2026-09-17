@@ -32,7 +32,9 @@
           success = result?.changed === true;
           if (success) {
             selected.delete(key);
-            messages.set(key, "已執行；再次執行請重新選擇模式。");
+            messages.set(key, mode === "voice_reminder"
+              ? "已執行，字卡已顯示；關閉字卡後開始執行。再次執行請重新選擇模式。"
+              : "已加入佇列；在上方佇列按「顯示字卡」開始執行。再次執行請重新選擇模式。");
           } else {
             messages.set(key, result ? "未執行，請確認模式與 server 狀態。" : "未收到執行結果，請先確認紀錄再重試。");
           }

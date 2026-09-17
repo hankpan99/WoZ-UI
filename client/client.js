@@ -28,8 +28,13 @@ const MIN_ACTION_COLUMN_WIDTH = 420;
 // 說明卡（整頁那張）與左下角的「詳細步驟」各有各的上限。
 const MAX_HELP_COLUMNS = 3;
 const MAX_DETAIL_COLUMNS = 2;
+// 中間「Alex準備執行」最多列出幾項，超過的接「…」。
+const MAX_QUEUE_ITEMS = 3;
+// 佇列膠囊的顏色依主動程度：1 被動＝橘、2 語音提醒＝綠、3 詢問後＝藍、4 直接＝紫。
+const QUEUE_LEVELS = { physical: "1", voice: "1", voice_reminder: "2", inquiry: "3", direct: "4" };
 const {
   actionKey, formatPoints, cleanLabel, pickedDetails, proactiveDetails, proactiveLevel, proactiveCost,
+  helpOverlayEntry,
 } = window.WozFormat;
 
 // Client 右側主步驟使用英文字母編號：A, B, ... Z, AA, AB ...。
@@ -80,6 +85,8 @@ const elements = {
   helpOverlayLegend: document.querySelector("#help-overlay-legend"),
   helpOverlayCostLabel: document.querySelector("#help-overlay-cost-label"),
   helpOverlayCost: document.querySelector("#help-overlay-cost"),
+  assistantCurrent: document.querySelector("#assistant-current"),
+  assistantQueue: document.querySelector("#assistant-queue"),
   offlineBanner: document.querySelector("#offline-banner"),
 };
 
@@ -538,9 +545,10 @@ function updateHelpCardWidth(detailCount) {
 function proactiveNotificationKey(state) {
   if (state.proactiveOverlay) return `proposal:${state.proactiveOverlay}`;
   const key = state.helpOverlay;
-  if (!key || state.helpModes?.[key] !== "voice_reminder") return null;
+  if (!key) return null;
   // 同一步驟連續執行模式 2 也要播放；使用本次帳目識別執行。
-  const entry = (state.ledger || []).findLast((item) => item.kind === "help" && item.key === key);
+  const entry = helpOverlayEntry(state);
+  if ((entry?.helpMode || state.helpModes?.[key]) !== "voice_reminder") return null;
   return `reminder:${key}:${entry?.id || entry?.run || ""}`;
 }
 
@@ -558,7 +566,9 @@ function syncHelpOverlay(state) {
   lastProactiveNotificationKey = notificationKey;
   hasReceivedOverlayState = true;
   const key = proactiveKey || state.helpOverlay || null;
-  const isReminder = !proactiveKey && state.helpModes?.[key] === "voice_reminder";
+  const entry = proactiveKey ? null : helpOverlayEntry(state);
+  const helpMode = entry?.helpMode || state.helpModes?.[key] || "physical";
+  const isReminder = !proactiveKey && helpMode === "voice_reminder";
   const mode = proactiveKey || isReminder ? "proactive" : "assist";
   // 卡片指的不一定是目前這一頁，所以一律從 key 反查，不能用 currentIndex。
   const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
@@ -573,17 +583,18 @@ function syncHelpOverlay(state) {
   elements.helpOverlay.dataset.mode = mode;
   elements.helpOverlay.dataset.interventionLevel = isProposal
     ? (proactiveLevel(action).startsWith("4.") ? "4" : "3")
-    : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
+    : (isReminder ? "2" : "1");
 
   const details = action.details || [];
   updateHelpCardWidth(details.length);
   // 主動提議的範圍來自 Excel，不看 helpDetails；兩種幫助各自獨立。
   const picked = new Set(
-    isProposal ? proactiveDetails(action) : pickedDetails(state, key, details.length),
+    isProposal ? proactiveDetails(action)
+      : (entry?.selectedDetails || pickedDetails(state, key, details.length)),
   );
 
   elements.helpOverlayStep.textContent = `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`;
-  const interventionMode = state.helpModes?.[key] || "physical";
+  const interventionMode = helpMode;
   const interventionTitles = {
     physical: "實體介入（1. 由您指揮Alex）",
     voice: "語音介入（1. 由您指揮Alex）",
@@ -630,13 +641,44 @@ function syncHelpOverlay(state) {
   elements.helpOverlayCostLabel.textContent = isProposal && !answer ? "接受將花費" : "本次花費";
   const cost = isProposal
     ? (state.proactive?.[key]?.cost ?? proactiveCost(action))
-    : state.helped?.[key];
+    : (entry ? (entry.originalCost ?? -entry.delta) : state.helped?.[key]);
   elements.helpOverlayCost.textContent = cost == null ? "—" : formatPoints(cost);
 
   fitHelpColumns();
   if (newlyOpenedProactive && state.soundEnabled !== false) {
     playNotificationSound();
   }
+}
+
+// 佇列項目不一定在目前這一頁，所以一律從 key 反查。
+function assistantItemLabel(item, withName) {
+  const [slideIndex, actionIndex] = item.key.split(":").map(Number);
+  const slide = slides[slideIndex];
+  const action = slide?.actions[actionIndex];
+  if (!action) return "";
+  const label = `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`;
+  return withName ? `${label} - ${action.name}` : label;
+}
+
+function syncAssistantStatus(state) {
+  const current = state.assistantCurrent;
+  const currentText = current ? assistantItemLabel(current, true) : "";
+  elements.assistantCurrent.textContent = currentText || "無";
+  elements.assistantCurrent.title = currentText;
+  elements.assistantCurrent.classList.toggle("is-empty", !currentText);
+
+  const queue = (state.assistantQueue || []).filter((item) => assistantItemLabel(item, false));
+  const pills = queue.slice(0, MAX_QUEUE_ITEMS).map((item) => Object.assign(document.createElement("span"), {
+    className: `queue-pill level-${QUEUE_LEVELS[item.mode] || "1"}`,
+    textContent: assistantItemLabel(item, false),
+  }));
+  if (queue.length > MAX_QUEUE_ITEMS) {
+    pills.push(Object.assign(document.createElement("span"), { className: "queue-more", textContent: "…" }));
+  }
+  if (!pills.length) {
+    pills.push(Object.assign(document.createElement("span"), { className: "assistant-text is-empty", textContent: "無" }));
+  }
+  elements.assistantQueue.replaceChildren(...pills);
 }
 
 function applyState(state) {
@@ -665,6 +707,7 @@ function applyState(state) {
     syncActionStates();
   }
 
+  syncAssistantStatus(state);
   syncHelpOverlay(state);
   applyClientView();
   // 「回到目前步驟」即使目標沒變，也要把參與者手動捲走的列表重新定位。

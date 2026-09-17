@@ -87,6 +87,12 @@ def action_proactive(key):
     )
 
 
+def proactive_level_code(key):
+    """主動介入的程度：Excel 標「4. 直接」＝direct，其餘＝inquiry（詢問後介入）。"""
+    action = _action_at(key) or {}
+    return "direct" if action.get("proactiveLevel") == "4. 直接" else "inquiry"
+
+
 def proactive_cost(key):
     """主動提議要扣的主動幫助點數。規則與 help_cost() 相同。
 
@@ -146,6 +152,12 @@ def default_state():
         "slideCount": SLIDE_COUNT,
         # wizard 指定 client 暫時查看的步驟；None 代表跟隨最小的未完成步驟。
         "clientViewKey": None,
+        # 助手的執行佇列。item = {"id", "key", "source": "help"|"proactive", "mode", "entryId"?}
+        # current＝Alex 正在執行的那一項；queue[0]＝下一個。
+        "assistantCurrent": None,
+        "assistantQueue": [],
+        # 目前說明卡屬於哪個佇列項目；關卡時它才會開始執行。None＝只是回顧。
+        "helpOverlayItem": None,
     }
 
 
@@ -297,10 +309,13 @@ def _pool_of(item):
 
 
 def recalculate(state):
-    """兩個池各自等於 總額 + Σ 自己那一池的 ledger.delta，不存在第二個點數來源。"""
+    """兩個池各自等於 總額 + Σ 自己那一池的 ledger.delta，不存在第二個點數來源。
+
+    主動池的介入被中途喊停時，沒做到的差額記在該筆的 assistRefund，退進可指揮池。
+    """
     assist = state["totalPoints"] + sum(
         item["delta"] for item in state["ledger"] if _pool_of(item) == ASSIST_POOL
-    )
+    ) + sum(item.get("assistRefund", 0) for item in state["ledger"])
     proactive = state["proactiveTotal"] + sum(
         item["delta"] for item in state["ledger"] if _pool_of(item) == PROACTIVE_POOL
     )
@@ -309,13 +324,171 @@ def recalculate(state):
     return state
 
 
-def _show_actor_overlay(state, key, proactive=False):
+def _show_actor_overlay(state, key, proactive=False, entry=None):
+    """entry＝這張卡對應的那一筆帳目；有的話用它當時的模式與勾選，
+    排隊期間 wizard 改了下一次的勾選也不會影響這張卡。"""
     state["actorError"] = None
     state["actorOverlay"] = {
         "key": key, "proactive": proactive,
-        "mode": state.get("helpModes", {}).get(key, "physical"),
-        "details": selected_details(state, key),
+        "mode": (entry or {}).get("helpMode") or state.get("helpModes", {}).get(key, "physical"),
+        "details": (entry or {}).get("selectedDetails", selected_details(state, key)),
     }
+
+
+# ---- 助手執行佇列 ----------------------------------------------------------
+
+def _new_item(key, source, mode, entry_id=None):
+    item = {"id": uuid.uuid4().hex, "key": key, "source": source, "mode": mode}
+    if entry_id is not None:
+        item["entryId"] = entry_id
+    return item
+
+
+def _queued_item(state, item_id):
+    return next((item for item in state["assistantQueue"] if item["id"] == item_id), None)
+
+
+def _help_entry(state, entry_id):
+    return next(
+        (item for item in state["ledger"]
+         if item["kind"] == "help" and item.get("id") == entry_id),
+        None,
+    )
+
+
+def _remove_items(state, predicate):
+    """從佇列與正在執行中拿掉符合條件的項目。"""
+    state["assistantQueue"] = [item for item in state["assistantQueue"] if not predicate(item)]
+    current = state["assistantCurrent"]
+    if current and predicate(current):
+        state["assistantCurrent"] = None
+
+
+def _start_or_front(state, item):
+    """字卡關掉＝要開始執行。助手閒著就直接開始；
+    在忙就排到佇列最前面，等 wizard 之後再開一次字卡。"""
+    state["assistantQueue"] = [other for other in state["assistantQueue"] if other["id"] != item["id"]]
+    if state["assistantCurrent"] is None:
+        state["assistantCurrent"] = item
+    else:
+        state["assistantQueue"].insert(0, item)
+
+
+def _end_current_for(state, keys):
+    """這些步驟被勾完成時，正在執行的那一項就算結束（不會自動接下一項）。"""
+    current = state["assistantCurrent"]
+    if current and current["key"] in keys:
+        state["assistantCurrent"] = None
+
+
+def _normalize_queue(state):
+    """說明卡被其他動作收掉、或項目已不在佇列時，綁定一併清掉。"""
+    item_id = state.get("helpOverlayItem")
+    if item_id and (not state["helpOverlay"] or _queued_item(state, item_id) is None):
+        state["helpOverlayItem"] = None
+
+
+def execution_status(state, entry_id=None, proactive_key=None):
+    """一筆紀錄目前的執行狀態：queued / running / 修正後的狀態 / completed。"""
+    def matches(item):
+        if entry_id is not None:
+            return item.get("entryId") == entry_id
+        return item["source"] == "proactive" and item["key"] == proactive_key
+
+    if any(matches(item) for item in state["assistantQueue"]):
+        return "queued"
+    current = state["assistantCurrent"]
+    if current and matches(current):
+        return "running"
+    if entry_id is not None:
+        amended = (_help_entry(state, entry_id) or {}).get("executionStatus")
+    else:
+        amended = (state["proactive"].get(proactive_key) or {}).get("executionStatus")
+    return amended or "completed"
+
+
+def _executed_cost(key, executed, base, original):
+    """修正後的花費：規則與 help_cost() 相同。
+    全部做完＝原本的花費；否則＝min(做了幾條, Excel 原價, 原本的花費)。"""
+    if not executed and base:
+        return 0
+    if len(executed) == len(base):
+        return _to_number(original)
+    return _to_number(min(len(executed), action_cost(key), original))
+
+
+def _executed_status(executed, base, cost):
+    if base:
+        if not executed:
+            return "cancelled"
+        return "completed" if len(executed) == len(base) else "stopped"
+    return "cancelled" if cost == 0 else "completed"
+
+
+def _amend_help(state, entry, details, cost=None, status=None):
+    key = entry.get("key")
+    total = len(action_details(key))
+    base = entry.get("selectedDetails")
+    if base is None:
+        base = list(range(total))
+    original = _to_number(entry.get("originalCost", -entry["delta"]))
+    executed = sorted({index for index in details if index in set(base)})
+    auto = _executed_cost(key, executed, base, original)
+    cost = auto if cost is None else _to_number(cost, auto)
+    if cost < 0:
+        return False
+    entry["originalCost"] = original
+    entry["executedDetails"] = executed
+    entry["executedCost"] = cost
+    entry["executionStatus"] = status or _executed_status(executed, base, cost)
+    if _pool_of(entry) == ASSIST_POOL:
+        entry["delta"] = -cost
+        entry.pop("assistRefund", None)
+    else:
+        # 主動池照扣原價，沒做到的部分退進可指揮池（與「不接受」同一套邏輯）。
+        entry["delta"] = -original
+        refund = _to_number(original - cost)
+        if refund > 0:
+            entry["assistRefund"] = refund
+        else:
+            entry.pop("assistRefund", None)
+    return True
+
+
+def _amend_proactive(state, key, details, cost=None, status=None):
+    result = state["proactive"].get(key)
+    if not result or result.get("status") != "accepted":
+        return False
+    marks = action_proactive(key)
+    original = _to_number(result["cost"])
+    executed = sorted({index for index in details if index in set(marks)})
+    auto = _executed_cost(key, executed, marks, original)
+    cost = auto if cost is None else _to_number(cost, auto)
+    if cost < 0:
+        return False
+    result["executedDetails"] = executed
+    result["executedCost"] = cost
+    result["executionStatus"] = status or _executed_status(executed, marks, cost)
+
+    # 帳目就地更新，不移動位置，「回溯最後操作」的順序才不會被打亂。
+    ledger = state["ledger"]
+    ledger[:] = [
+        item for item in ledger
+        if not (item["kind"] == "proactive" and item.get("key") == key and item.get("partialRefund"))
+    ]
+    main_index = next(
+        (index for index, item in enumerate(ledger)
+         if item["kind"] == "proactive" and item.get("key") == key),
+        None,
+    )
+    refund = _to_number(original - cost)
+    if main_index is not None and refund > 0:
+        main = ledger[main_index]
+        entry = _entry("proactive", refund, f"{main['note']} → 未執行動作退回可指揮點數", key, ASSIST_POOL)
+        entry["ts"] = main["ts"]
+        entry["partialRefund"] = True
+        ledger.insert(main_index + 1, entry)
+    return True
 
 
 def apply_action(state, action):
@@ -362,9 +535,22 @@ def apply_action(state, action):
                 return state, False
             done.discard(key)
         state["done"] = sorted(done, key=_key_order)
-        # 做完了就不用再看說明卡。
+        # 做完了就不用再看說明卡，Alex 正在執行的這一步也算結束。
         if action.get("value"):
             _close_overlay_for(state, {key})
+            _end_current_for(state, {key})
+
+    elif kind == "finishCurrent":
+        # Wizard 在佇列面板按「完成」：結束正在執行，並把該步驟勾完成。
+        # 跟 setDone 分開，是因為同一步驟可能早就勾過完成又再介入一次，
+        # 這時 setDone 會判定「沒有變更」而收不掉正在執行。
+        current = state["assistantCurrent"]
+        if not current:
+            return state, False
+        key = current["key"]
+        state["done"] = sorted(set(state["done"]) | {key}, key=_key_order)
+        _close_overlay_for(state, {key})
+        state["assistantCurrent"] = None
 
     elif kind == "setDoneBulk":
         keys = [key for key in action.get("keys") or [] if isinstance(key, str)]
@@ -377,6 +563,7 @@ def apply_action(state, action):
         state["done"] = sorted(updated, key=_key_order)
         if action.get("value"):
             _close_overlay_for(state, set(keys))
+            _end_current_for(state, set(keys))
 
     elif kind in ("repeatHelped", "setHelped"):
         key = action.get("key")
@@ -401,9 +588,17 @@ def apply_action(state, action):
                       "interventionType": "proactive" if mode == "voice_reminder" else "passive"})
         state["ledger"].append(entry)
         state["helped"][key] = cost
-        _show_actor_overlay(state, key)
-        state["helpOverlay"] = key
-        state["proactiveOverlay"] = None
+        item = _new_item(key, "help", mode, entry["id"])
+        if mode == "voice_reminder":
+            # 模式 2 屬於主動類：不用排隊，直接開卡；關卡後才開始執行。
+            state["assistantQueue"].insert(0, item)
+            _show_actor_overlay(state, key, entry=entry)
+            state["helpOverlay"] = key
+            state["helpOverlayItem"] = item["id"]
+            state["proactiveOverlay"] = None
+        else:
+            # 模式 1 只排進佇列，等 wizard 按「顯示字卡」。
+            state["assistantQueue"].append(item)
 
     elif kind == "setHelpDetail":
         # 這次要代勞哪些詳細步驟。index 為 None＝整個步驟全選 / 全不選。
@@ -439,11 +634,30 @@ def apply_action(state, action):
         # 只有已經扣過點的步驟才叫得出說明卡；None＝關掉。
         key = action.get("key")
         key = key if isinstance(key, str) and key in state["helped"] else None
-        if key == state["helpOverlay"] and (not key or state.get("actorOverlay") and not state.get("actorError")):
+        item_id = None
+        if key:
+            # 綁定指定的佇列項目；沒指定就綁這個步驟在佇列裡最早的那一項。
+            item = _queued_item(state, action.get("itemId"))
+            if not item or item["key"] != key or item["source"] != "help":
+                item = next(
+                    (other for other in state["assistantQueue"]
+                     if other["key"] == key and other["source"] == "help"),
+                    None,
+                )
+            item_id = item["id"] if item else None
+        if (key == state["helpOverlay"] and item_id == state.get("helpOverlayItem")
+                and (not key or state.get("actorOverlay") and not state.get("actorError"))):
             return state, False
         if key:
-            _show_actor_overlay(state, key)
+            entry = _help_entry(state, item["entryId"]) if item_id else None
+            _show_actor_overlay(state, key, entry=entry)
+        else:
+            # 關卡＝這一項要開始執行（助手在忙就排到最前面）。
+            bound = _queued_item(state, state.get("helpOverlayItem"))
+            if bound and state["helpOverlay"]:
+                _start_or_front(state, bound)
         state["helpOverlay"] = key
+        state["helpOverlayItem"] = item_id
         # 兩張卡互斥：叫出說明卡就把主動提議卡收掉。
         if key:
             state["proactiveOverlay"] = None
@@ -456,6 +670,16 @@ def apply_action(state, action):
             return state, False
         if key:
             _show_actor_overlay(state, key, proactive=True)
+        else:
+            # 已接受、還在排隊的主動介入：再開一次卡、關卡後才開始執行。
+            closing = state["proactiveOverlay"]
+            queued = next(
+                (item for item in state["assistantQueue"]
+                 if item["source"] == "proactive" and item["key"] == closing),
+                None,
+            )
+            if queued:
+                _start_or_front(state, queued)
         state["proactiveOverlay"] = key
         if key:
             state["helpOverlay"] = None
@@ -474,6 +698,14 @@ def apply_action(state, action):
             # 已回答後若重新打開提議卡，再按相同答案仍要把卡片關掉。
             if status is not None and state.get("proactiveOverlay") == key:
                 _close_overlay_for(state, {key})
+                queued = next(
+                    (item for item in state["assistantQueue"]
+                     if item["source"] == "proactive" and item["key"] == key),
+                    None,
+                )
+                if status == "accepted" and queued:
+                    _start_or_front(state, queued)
+                _normalize_queue(state)
                 recalculate(state)
                 state["version"] += 1
                 return state, True
@@ -482,6 +714,8 @@ def apply_action(state, action):
         # 沿用 setHelped 的原則：帳本＝目前生效的帳目清單，不記反向帳。
         # 改判與取消都是先把舊的那幾筆拿掉，再記新的，結果永遠可預期。
         _drop_proactive_entries(state, key)
+        # 改判或取消：舊答案的佇列項目一律拿掉，接受的話下面再重新排。
+        _remove_items(state, lambda item: item["source"] == "proactive" and item["key"] == key)
 
         if status is None:
             state["proactive"].pop(key, None)
@@ -500,12 +734,16 @@ def apply_action(state, action):
                 )
             # 不論接受或不接受，答案送出後都立即收起 Client 的提議卡。
             _close_overlay_for(state, {key})
+            if status == "accepted":
+                # 主動介入不用排隊；助手在忙時排到最前面，等之後再開一次提議卡。
+                _start_or_front(state, _new_item(key, "proactive", proactive_level_code(key)))
 
     elif kind == "undoLedger":
         if not state["ledger"]:
             return state, False
         removed = state["ledger"].pop()
         if removed["kind"] == "help":
+            _remove_items(state, lambda item: item.get("entryId") == removed.get("id"))
             _restore_help_from_ledger(state, removed.get("key"))
         elif removed["kind"] == "proactive":
             # 「不接受」記了兩筆（主動池扣、可指揮池退），
@@ -513,7 +751,58 @@ def apply_action(state, action):
             key = removed.get("key")
             _drop_proactive_entries(state, key)
             state["proactive"].pop(key, None)
+            _remove_items(state, lambda item: item["source"] == "proactive" and item["key"] == key)
             _close_overlay_for(state, {key})
+
+    elif kind == "amendExecution":
+        # 事後修正「實際做過哪些動作」：help 紀錄用 entryId，主動提議用 proactiveKey。
+        details = action.get("details")
+        if not isinstance(details, list) or not all(isinstance(index, int) for index in details):
+            return state, False
+        cost = action.get("cost")
+        if cost is not None and not isinstance(cost, (int, float)):
+            return state, False
+        if action.get("entryId") is not None:
+            entry = _help_entry(state, action.get("entryId"))
+            if not entry or not _amend_help(state, entry, details, cost):
+                return state, False
+        elif not _amend_proactive(state, action.get("proactiveKey"), details, cost):
+            return state, False
+
+    elif kind == "stopCurrent":
+        # 參與者喊停：勾出實際做了哪些動作，重新計價，並結束正在執行。
+        current = state["assistantCurrent"]
+        details = action.get("details")
+        cost = action.get("cost")
+        if (not current or not isinstance(details, list)
+                or not all(isinstance(index, int) for index in details)
+                or (cost is not None and not isinstance(cost, (int, float)))):
+            return state, False
+        if current["source"] == "help":
+            entry = _help_entry(state, current.get("entryId"))
+            if entry and not _amend_help(state, entry, details, cost):
+                return state, False
+        elif not _amend_proactive(state, current["key"], details, cost):
+            return state, False
+        state["assistantCurrent"] = None
+
+    elif kind == "cancelQueued":
+        # 還在排隊就反悔：紀錄保留、標成已取消、0 點。
+        item = _queued_item(state, action.get("itemId"))
+        if not item:
+            return state, False
+        if item["source"] == "help":
+            entry = _help_entry(state, item.get("entryId"))
+            if entry:
+                _amend_help(state, entry, [], 0, "cancelled")
+        else:
+            _amend_proactive(state, item["key"], [], 0, "cancelled")
+        _remove_items(state, lambda other: other["id"] == item["id"])
+        if state["helpOverlayItem"] == item["id"]:
+            state["helpOverlay"] = None
+            state["helpOverlayItem"] = None
+        if item["source"] == "proactive" and state["proactiveOverlay"] == item["key"]:
+            state["proactiveOverlay"] = None
 
     elif kind == "setClientView":
         # wizard 可指定 client 顯示某一步；None 等同回到正式的目前步驟。
@@ -553,6 +842,7 @@ def apply_action(state, action):
         print(f"[warn] 未知的 action：{kind!r} —— 若這是新加的功能，請重啟 server。")
         return state, False
 
+    _normalize_queue(state)
     recalculate(state)
     state["version"] += 1
     return state, True
@@ -635,6 +925,10 @@ def export_payload(state):
         selected = entry.get("selectedDetails")
         if selected is None:
             selected = selected_details(state, key)
+        executed = entry.get("executedDetails", selected)
+        changes = [{"pool": _pool_of(entry), "delta": -cost}]
+        if entry.get("assistRefund"):
+            changes.append({"pool": ASSIST_POOL, "delta": entry["assistRefund"]})
         records.append({
             **location,
             "entryId": entry.get("id"),
@@ -650,8 +944,12 @@ def export_payload(state):
             "status": "accepted",
             "cost": cost,
             "timestamp": entry.get("ts"),
-            "pointChanges": [{"pool": _pool_of(entry), "delta": -cost}],
+            "pointChanges": changes,
             **_export_selection(key, selected),
+            "executionStatus": execution_status(state, entry_id=entry.get("id")),
+            "originalCost": entry.get("originalCost", cost),
+            "executedCost": entry.get("executedCost", entry.get("originalCost", cost)),
+            "executedActions": _export_selection(key, executed)["selectedActions"],
         })
 
     for key, result in (state.get("proactive") or {}).items():
@@ -659,9 +957,13 @@ def export_payload(state):
         if not location:
             continue
         cost = result.get("cost", 0)
+        accepted = result.get("status") == "accepted"
         changes = [{"pool": "proactive", "delta": -cost}]
         if result.get("status") == "declined":
             changes.append({"pool": "assist", "delta": cost})
+        executed_cost = result.get("executedCost", cost)
+        if accepted and cost - executed_cost > 0:
+            changes.append({"pool": "assist", "delta": _to_number(cost - executed_cost)})
         records.append({
             **location,
             "mode": "3. 主動",
@@ -672,6 +974,12 @@ def export_payload(state):
             "timestamp": timestamp("proactive", key),
             "pointChanges": changes,
             **_export_selection(key, action_proactive(key)),
+            "executionStatus": execution_status(state, proactive_key=key) if accepted else None,
+            "originalCost": cost,
+            "executedCost": executed_cost if accepted else 0,
+            "executedActions": _export_selection(
+                key, result.get("executedDetails", action_proactive(key)) if accepted else [],
+            )["selectedActions"],
         })
 
     for entry in ledger:

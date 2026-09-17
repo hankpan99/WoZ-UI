@@ -64,8 +64,34 @@
     return Math.min(marks, price);
   };
 
+  // ---- 助手佇列 ----------------------------------------------------------
+
+  // 修正「實際做過的動作」後的花費。server/state.py 的 _executed_cost() 鏡像。
+  // 全部做完＝原本的花費；否則＝min(做了幾條, Excel 原價, 原本的花費)。
+  const executedCost = (action, executedCount, baseCount, original) => {
+    if (!executedCount && baseCount) return 0;
+    if (executedCount === baseCount) return original;
+    return Math.min(executedCount, action?.cost || 0, original);
+  };
+
+  const assistantItems = (state) =>
+    [state?.assistantCurrent, ...(state?.assistantQueue || [])].filter(Boolean);
+
+  // 說明卡對應的那一筆帳目：卡片綁了佇列項目就用它的，否則用這個步驟最近一次。
+  // 排隊期間 wizard 可能已經改了下一次的勾選，卡片要顯示「當時下指令」的內容。
+  const helpOverlayEntry = (state) => {
+    const key = state?.helpOverlay;
+    if (!key) return null;
+    const ledger = state.ledger || [];
+    const item = assistantItems(state).find((other) => other.id === state.helpOverlayItem);
+    return (item?.entryId && ledger.find((entry) => entry.id === item.entryId))
+      || ledger.findLast((entry) => entry.kind === "help" && entry.key === key)
+      || null;
+  };
+
   window.WozFormat = {
     actionKey, formatPoints, formatDelta, cleanLabel, formatTime, slideCost,
     pickedDetails, helpCost, proactiveDetails, proactiveLevel, proactiveCost,
+    assistantItems, helpOverlayEntry, executedCost,
   };
 })();

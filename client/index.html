@@ -39,6 +39,17 @@
         </article>
       </section>
 
+      <section class="assistant-status" aria-label="助手執行狀態" aria-live="polite">
+        <div class="assistant-slot assistant-now">
+          <span class="assistant-label">Alex正在執行：</span>
+          <strong class="assistant-text" id="assistant-current">無</strong>
+        </div>
+        <div class="assistant-slot assistant-next">
+          <span class="assistant-label">Alex準備執行：</span>
+          <span class="assistant-queue" id="assistant-queue"></span>
+        </div>
+      </section>
+
       <section class="recipe-stage" aria-live="polite">
         <div class="slide-layout">
           <aside class="preview-panel" id="preview-panel">

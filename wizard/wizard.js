@@ -3,7 +3,7 @@
 const slides = window.RECIPE_SLIDES || [];
 const {
   actionKey, formatPoints, formatDelta, cleanLabel, pickedDetails, helpCost,
-  proactiveDetails, proactiveLevel, proactiveCost,
+  proactiveDetails, proactiveLevel, proactiveCost, helpOverlayEntry, executedCost,
 } = window.WozFormat;
 const { dispatch } = window.WozStore;
 
@@ -32,6 +32,13 @@ const elements = {
   overlayStatusText: document.querySelector("#overlay-status-text"),
   overlayClose: document.querySelector("#overlay-close"),
   offlineBanner: document.querySelector("#offline-banner"),
+  assistantCurrent: document.querySelector("#assistant-current"),
+  assistantStop: document.querySelector("#assistant-stop"),
+  assistantDone: document.querySelector("#assistant-done"),
+  assistantStopEditor: document.querySelector("#assistant-stop-editor"),
+  assistantQueueCount: document.querySelector("#assistant-queue-count"),
+  assistantQueueList: document.querySelector("#assistant-queue-list"),
+  assistantBusyHint: document.querySelector("#assistant-busy-hint"),
 };
 
 let currentIndex = 0;
@@ -45,6 +52,10 @@ const expandedKeys = new Set();
 const manualCostKeys = new Set();
 // 上一次的「接受幫助」集合，用來認出剛勾起來的步驟並自動展開它的詳細步驟。
 let lastHelpedKeys = new Set();
+// 「修正執行動作」的草稿：recordId -> { details: Set, cost: string|null }；cost 為 null＝照規則自動算。
+const executionDrafts = new Map();
+// 展開中的修正編輯器：紀錄的 recordId，或喊停用的 "stop"。
+const openEditors = new Set();
 const intervention = window.WizardIntervention.create(dispatch, () => {
   if (window.WozStore.state) syncStepList(window.WozStore.state);
 });
@@ -391,6 +402,9 @@ function buildProactiveRow(key, action, slide, index) {
     dispatch({ type: "setProactive", key, status: null });
   });
 
+  const busyHint = Object.assign(document.createElement("span"), { className: "busy-hint", hidden: true });
+  busyHint.dataset.role = "proactive-busy";
+
   row.append(
     overlayLabel,
     Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
@@ -399,6 +413,7 @@ function buildProactiveRow(key, action, slide, index) {
     answerButton("accept", "接受", "accepted"),
     answerButton("decline", "不接受", "declined"),
     clearButton,
+    busyHint,
   );
   return row;
 }
@@ -489,6 +504,10 @@ function syncStepList(state) {
   const proactive = state.proactive || {};
   const overlayKey = state.helpOverlay || null;
   const proactiveOverlayKey = state.proactiveOverlay || null;
+  // 主動類（模式 2、3、4）不取代正在執行的項目：送出仍可以，但要提醒 wizard。
+  const busyText = state.assistantCurrent
+    ? `⚠ Alex 正在執行「${itemLabel(state.assistantCurrent)}」；關閉字卡後會排在佇列最前面，需再開一次字卡。`
+    : "";
   const executedByKey = new Map();
   (state.ledger || []).forEach((entry) => {
     if (entry.kind !== "help" || !entry.key) return;
@@ -558,7 +577,9 @@ function syncStepList(state) {
     executeButton.dataset.mode = selectedMode || "";
     const hint = row.querySelector(".repeatable-hint");
     hint.setAttribute("role", "status");
-    hint.textContent = intervention.message(key) || "先選模式與動作，再按執行介入才扣點並新增紀錄。";
+    const reminderBusy = selectedMode === "voice_reminder" ? busyText : "";
+    hint.textContent = intervention.message(key) || reminderBusy || "先選模式與動作，再按執行介入才扣點並新增紀錄；模式 1 會排進助手佇列。";
+    hint.classList.toggle("is-warning", !intervention.message(key) && Boolean(reminderBusy));
     row.querySelectorAll("[data-detail-index], .mini-button").forEach((control) => { control.disabled = executing; });
 
     const overlayButton = row.querySelector('[data-role="overlay"]');
@@ -577,7 +598,7 @@ function syncStepList(state) {
     clientViewButton.setAttribute("aria-pressed", String(isClientView));
     clientViewButton.title = isClientView ? "取消預覽此步驟，回到當前步驟" : "預覽此步驟";
 
-    syncProactiveRow(row, key, action, proactive[key], proactiveOverlayKey === key);
+    syncProactiveRow(row, key, action, proactive[key], proactiveOverlayKey === key, busyText);
   });
 
   lastHelpedKeys = new Set(Object.keys(helped));
@@ -589,11 +610,15 @@ function syncStepList(state) {
 }
 
 // 沒有主動提議的步驟不會有這一列，直接跳過。
-function syncProactiveRow(row, key, action, entry, isShowing) {
+function syncProactiveRow(row, key, action, entry, isShowing, busyText) {
   const overlayBox = row.querySelector('[data-role="proactive-overlay"]');
   if (!overlayBox) return;
 
   const status = entry?.status || null;
+  const busyHint = row.querySelector('[data-role="proactive-busy"]');
+  // 已經回答過的提議就不用再提醒。
+  busyHint.hidden = !busyText || Boolean(status);
+  busyHint.textContent = busyText;
   const costInput = row.querySelector('[data-role="proactive-cost"]');
   // 已經有回答就顯示實際記在帳上的金額，並鎖住輸入框（比照「助手介入」）。
   if (document.activeElement !== costInput) {
@@ -640,13 +665,19 @@ function syncOverlayStatus(state) {
   elements.overlayStatus.hidden = !key;
   const [slideIndex, actionIndex] = key ? key.split(":").map(Number) : [];
   const action = slides[slideIndex]?.actions[actionIndex];
+  const helpMode = helpOverlayEntry(state)?.helpMode || state.helpModes?.[key];
   elements.overlayStatus.dataset.interventionLevel = proactiveKey
     ? (proactiveLevel(action).startsWith("4.") ? "4" : "3")
-    : (state.helpModes?.[key] === "voice_reminder" ? "2" : "1");
+    : (helpMode === "voice_reminder" ? "2" : "1");
   // 關閉鈕要送對應的 action，記在 dataset 上讓 click handler 讀。
   elements.overlayStatus.dataset.mode = proactiveKey ? "proactive" : "assist";
-  elements.overlayStatus.dataset.category = proactiveKey || state.helpModes?.[key] === "voice_reminder" ? "proactive" : "passive";
-  elements.overlayClose.textContent = "關閉 Client UI 顯示";
+  elements.overlayStatus.dataset.category = proactiveKey || helpMode === "voice_reminder" ? "proactive" : "passive";
+  // 這張卡屬於排隊中的項目時，關卡＝開始執行（助手在忙就排到最前面）。
+  const startsOnClose = proactiveKey
+    ? (state.assistantQueue || []).some((item) => item.source === "proactive" && item.key === proactiveKey)
+    : Boolean(state.helpOverlayItem);
+  elements.overlayClose.textContent = !startsOnClose ? "關閉 Client UI 顯示"
+    : state.assistantCurrent ? "關閉 Client UI 顯示（排到佇列最前面）" : "關閉 Client UI 顯示（開始執行）";
   if (!key) return;
 
   const slide = slides[slideIndex];
@@ -675,6 +706,288 @@ function syncClientViewStatus(state) {
   const viewed = slideIndex === currentIndex ? actionIndex : fallback;
   elements.viewPrev.disabled = !actions.length || viewed <= 0;
   elements.viewNext.disabled = !actions.length || viewed >= actions.length - 1;
+}
+
+// ---- 助手佇列與執行修正 --------------------------------------------------
+
+const MODE_TAGS = {
+  physical: ["1. 實體", "1"],
+  voice: ["1. 語音", "1"],
+  voice_reminder: ["2. 語音提醒", "2"],
+  inquiry: ["3. 詢問後介入", "3"],
+  direct: ["4. 直接介入", "4"],
+};
+const EXECUTION_LABELS = {
+  queued: "排隊中", running: "執行中", completed: "已完成", stopped: "中途停止", cancelled: "已取消",
+};
+
+function locate(key) {
+  const [slideIndex, actionIndex] = key.split(":").map(Number);
+  const slide = slides[slideIndex];
+  return { slideIndex, actionIndex, slide, action: slide?.actions[actionIndex] };
+}
+
+function itemLabel(item) {
+  const { slide, actionIndex, action } = locate(item.key);
+  return action ? `第${slide.step}頁 · 步驟${stepLabel(actionIndex)}　${action.name}` : item.key;
+}
+
+function itemSummary(item) {
+  const [text, level] = MODE_TAGS[item.mode] || MODE_TAGS.physical;
+  const summary = document.createElement("span");
+  summary.className = "queue-summary";
+  summary.append(
+    Object.assign(document.createElement("span"), { className: `queue-mode level-${level}`, textContent: text }),
+    Object.assign(document.createElement("span"), { className: "queue-label", textContent: itemLabel(item) }),
+  );
+  return summary;
+}
+
+// 一筆紀錄可以修正的範圍：help 用該筆帳目當時的勾選快照；主動提議用 Excel 的標記。
+function executionTarget(state, { entryId, proactiveKey }) {
+  if (entryId) {
+    const entry = (state.ledger || []).find((item) => item.kind === "help" && item.id === entryId);
+    if (!entry) return null;
+    const { action } = locate(entry.key);
+    const base = entry.selectedDetails || [...Array(action?.details?.length || 0).keys()];
+    const original = entry.originalCost ?? -entry.delta;
+    return {
+      recordId: `help:${entry.id}`, action, base, original,
+      executed: entry.executedDetails || base,
+      payload: { entryId },
+    };
+  }
+  const result = state.proactive?.[proactiveKey];
+  if (result?.status !== "accepted") return null;
+  const { action } = locate(proactiveKey);
+  const base = proactiveDetails(action);
+  return {
+    recordId: `proactive:${proactiveKey}`, action, base, original: result.cost,
+    executed: result.executedDetails || base,
+    payload: { proactiveKey },
+  };
+}
+
+const itemTarget = (state, item) => executionTarget(
+  state, item.source === "help" ? { entryId: item.entryId } : { proactiveKey: item.key },
+);
+
+// server/state.py 的 execution_status() 鏡像。
+function executionStatus(state, target) {
+  const { entryId, proactiveKey } = target.payload;
+  const matches = (item) => (entryId
+    ? item.entryId === entryId
+    : item.source === "proactive" && item.key === proactiveKey);
+  if ((state.assistantQueue || []).some(matches)) return "queued";
+  if (state.assistantCurrent && matches(state.assistantCurrent)) return "running";
+  const source = entryId
+    ? (state.ledger || []).find((item) => item.id === entryId)
+    : state.proactive?.[proactiveKey];
+  return source?.executionStatus || "completed";
+}
+
+// 狀態每次進來都會重建佇列與紀錄；重建後把游標放回原本的欄位。
+function withFocusKept(rebuild) {
+  const focus = document.activeElement?.dataset?.focus;
+  rebuild();
+  if (focus) document.querySelector(`[data-focus="${CSS.escape(focus)}"]`)?.focus();
+}
+
+function refreshExecutionViews() {
+  const state = window.WozStore.state;
+  if (!state) return;
+  withFocusKept(() => {
+    syncAssistantQueue(state);
+    syncLedger(state);
+  });
+}
+
+// 勾選實際做過的動作 → 依規則自動算花費（可手改）→ 送出。喊停與紀錄修正共用。
+function buildExecutionEditor(target, submitLabel, submit, close) {
+  if (!executionDrafts.has(target.recordId)) {
+    executionDrafts.set(target.recordId, { details: new Set(target.executed), cost: null });
+  }
+  const draft = executionDrafts.get(target.recordId);
+  const details = target.action?.details || [];
+  const autoCost = () => executedCost(target.action, draft.details.size, target.base.length, target.original);
+  const costValue = () => (draft.cost === null ? autoCost() : Number(draft.cost));
+
+  const editor = document.createElement("div");
+  editor.className = "execution-editor";
+
+  const head = document.createElement("div");
+  head.className = "detail-head";
+  head.append(Object.assign(document.createElement("span"), {
+    className: "execution-editor-title",
+    textContent: `實際做過的動作 ${draft.details.size} / ${target.base.length}`,
+  }));
+  [["全選", true], ["全不選", false]].forEach(([text, value]) => {
+    const button = Object.assign(document.createElement("button"), {
+      type: "button", className: "mini-button", textContent: text,
+    });
+    button.addEventListener("click", () => {
+      draft.details = new Set(value ? target.base : []);
+      draft.cost = null;
+      refreshExecutionViews();
+    });
+    head.append(button);
+  });
+
+  const checks = document.createElement("div");
+  checks.className = "detail-checks";
+  if (!target.base.length) {
+    checks.append(Object.assign(document.createElement("span"), {
+      className: "execution-editor-empty", textContent: "這次沒有更細的動作，請直接填實際花費。",
+    }));
+  }
+  target.base.forEach((detailIndex) => {
+    const label = document.createElement("label");
+    label.className = "detail-check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = draft.details.has(detailIndex);
+    box.dataset.focus = `${target.recordId}:detail:${detailIndex}`;
+    box.addEventListener("change", () => {
+      if (box.checked) draft.details.add(detailIndex);
+      else draft.details.delete(detailIndex);
+      draft.cost = null;
+      refreshExecutionViews();
+    });
+    label.append(
+      box,
+      Object.assign(document.createElement("span"), {
+        className: "detail-check-index", textContent: String(detailIndex + 1).padStart(2, "0"),
+      }),
+      Object.assign(document.createElement("span"), {
+        className: "detail-check-text", textContent: details[detailIndex] || "",
+      }),
+    );
+    checks.append(label);
+  });
+
+  const foot = document.createElement("div");
+  foot.className = "execution-editor-foot";
+  const costInput = document.createElement("input");
+  costInput.className = "cost-input";
+  costInput.type = "number";
+  costInput.step = "any";
+  costInput.min = "0";
+  costInput.dataset.focus = `${target.recordId}:cost`;
+  costInput.value = String(costValue());
+
+  const submitButton = document.createElement("button");
+  submitButton.type = "button";
+  submitButton.className = "execute-intervention-button";
+  const syncSubmit = () => {
+    const value = costValue();
+    const valid = Number.isFinite(value) && value >= 0;
+    submitButton.disabled = !valid;
+    submitButton.textContent = `${submitLabel}（原本 ${formatPoints(target.original)} → ${valid ? formatPoints(value) : "—"} 點）`;
+  };
+  costInput.addEventListener("input", () => {
+    draft.cost = costInput.value;
+    syncSubmit();
+  });
+  submitButton.addEventListener("click", async () => {
+    const cost = costValue();
+    if (!Number.isFinite(cost) || cost < 0) return;
+    submitButton.disabled = true;
+    const result = await submit({ details: [...draft.details].sort((a, b) => a - b), cost });
+    if (result?.changed) {
+      executionDrafts.delete(target.recordId);
+      close();
+    } else {
+      window.alert("修正沒有送出，請確認連線與 server 狀態（新功能需要重啟 server）。");
+      syncSubmit();
+    }
+  });
+  syncSubmit();
+
+  const cancelButton = Object.assign(document.createElement("button"), {
+    type: "button", className: "ghost-button", textContent: "取消",
+  });
+  cancelButton.addEventListener("click", () => {
+    executionDrafts.delete(target.recordId);
+    close();
+  });
+
+  foot.append(
+    Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "實際花費" }),
+    costInput,
+    Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "點" }),
+    submitButton,
+    cancelButton,
+  );
+  editor.append(head, checks, foot);
+  return editor;
+}
+
+function syncAssistantQueue(state) {
+  const current = state.assistantCurrent || null;
+  const currentTarget = current ? itemTarget(state, current) : null;
+  if (!currentTarget) openEditors.delete("stop");
+
+  elements.assistantCurrent.replaceChildren(current
+    ? itemSummary(current)
+    : Object.assign(document.createElement("span"), { className: "queue-empty", textContent: "閒置中" }));
+  elements.assistantStop.disabled = !currentTarget;
+  elements.assistantDone.disabled = !current;
+  const stopOpen = openEditors.has("stop");
+  elements.assistantStop.classList.toggle("is-on", stopOpen);
+  elements.assistantStop.setAttribute("aria-expanded", String(stopOpen));
+  elements.assistantStopEditor.hidden = !stopOpen;
+  elements.assistantStopEditor.replaceChildren(...(stopOpen ? [buildExecutionEditor(
+    currentTarget, "確認喊停",
+    (payload) => dispatch({ type: "stopCurrent", ...payload }),
+    () => { openEditors.delete("stop"); refreshExecutionViews(); },
+  )] : []));
+
+  const queue = state.assistantQueue || [];
+  elements.assistantQueueCount.textContent = `${queue.length} 項`;
+  elements.assistantBusyHint.hidden = !current;
+  const rows = queue.map((item, index) => {
+    const row = document.createElement("li");
+    row.className = "assistant-queue-item";
+    const showing = item.source === "help"
+      ? state.helpOverlayItem === item.id
+      : state.proactiveOverlay === item.key;
+    row.classList.toggle("is-showing", showing);
+
+    const showButton = document.createElement("button");
+    showButton.type = "button";
+    showButton.className = `ghost-button queue-show-button${showing ? " is-showing" : ""}`;
+    showButton.textContent = showing ? (current ? "關閉字卡" : "關閉字卡（開始執行）") : "顯示字卡";
+    showButton.addEventListener("click", () => {
+      if (item.source === "help") {
+        dispatch({ type: "setHelpOverlay", key: showing ? null : item.key, itemId: item.id });
+      } else {
+        dispatch({ type: "setProactiveOverlay", key: showing ? null : item.key });
+      }
+    });
+
+    const cancelButton = Object.assign(document.createElement("button"), {
+      type: "button", className: "ghost-button", textContent: "取消",
+    });
+    cancelButton.addEventListener("click", () => {
+      if (confirm(`確定取消「${itemLabel(item)}」嗎？紀錄會保留並改成已取消、0 點。`)) {
+        dispatch({ type: "cancelQueued", itemId: item.id });
+      }
+    });
+
+    row.append(
+      Object.assign(document.createElement("span"), { className: "queue-order", textContent: `#${index + 1}` }),
+      itemSummary(item),
+      showButton,
+      cancelButton,
+    );
+    return row;
+  });
+  if (!rows.length) {
+    rows.push(Object.assign(document.createElement("li"), {
+      className: "queue-empty", textContent: "目前沒有排隊的指令",
+    }));
+  }
+  elements.assistantQueueList.replaceChildren(...rows);
 }
 
 // ---- 點數與帳本 ----------------------------------------------------------
@@ -715,6 +1028,8 @@ function buildLedgerRecords(state) {
     const helpMode = entry.helpMode || state.helpModes?.[key] || "physical";
     const selected = entry.selectedDetails
       || pickedDetails(state, key, (action.details || []).length);
+    const changes = [{ pool: entry.pool || "assist", delta: entry.delta }];
+    if (entry.assistRefund) changes.push({ pool: "assist", delta: entry.assistRefund });
     records.push({
       key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
       mode: helpMode === "voice_reminder" ? "2. 語音提醒建議"
@@ -722,8 +1037,9 @@ function buildLedgerRecords(state) {
       modeCode: helpMode === "voice_reminder" ? 2 : 1,
       status: entry.run ? `第 ${entry.run} 次執行` : "已介入",
       action: action.name, ts: entry.ts,
-      changes: [{ pool: entry.pool || "assist", delta: entry.delta }],
+      changes,
       selection: selectionSummary(action, selected),
+      target: executionTarget(state, { entryId: entry.id }),
     });
   });
 
@@ -734,12 +1050,15 @@ function buildLedgerRecords(state) {
     if (!action) return;
     const changes = [{ pool: "proactive", delta: -result.cost }];
     if (result.status === "declined") changes.push({ pool: "assist", delta: result.cost });
+    const unexecuted = result.status === "accepted" ? result.cost - (result.executedCost ?? result.cost) : 0;
+    if (unexecuted > 0) changes.push({ pool: "assist", delta: unexecuted });
     records.push({
       key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
       mode: "3. 主動", modeCode: 3,
       status: result.status === "accepted" ? "接受" : "不接受", action: action.name,
       ts: timestampFor("proactive", key), changes,
       selection: selectionSummary(action, proactiveDetails(action)),
+      target: executionTarget(state, { proactiveKey: key }),
     });
   });
 
@@ -801,6 +1120,47 @@ function syncLedger(state) {
       );
       item.append(banner);
     }
+
+    const target = record.target;
+    if (target) {
+      const status = executionStatus(state, target);
+      const open = openEditors.has(target.recordId);
+      const exec = document.createElement("div");
+      exec.className = "ledger-exec";
+      exec.append(Object.assign(document.createElement("span"), {
+        className: `ledger-status status-${status}`, textContent: EXECUTION_LABELS[status],
+      }));
+      if (status === "stopped" || status === "cancelled") {
+        exec.append(Object.assign(document.createElement("span"), {
+          className: "ledger-executed",
+          textContent: `實際做了 ${target.executed.length} / ${target.base.length} 動作：${detailText(
+            target.executed.map((index) => ({ index: index + 1, text: target.action?.details?.[index] || "" })),
+          )}`,
+        }));
+      }
+      const toggle = Object.assign(document.createElement("button"), {
+        type: "button", className: `mini-button${open ? " is-on" : ""}`,
+        textContent: open ? "收起修正" : "修正執行動作",
+      });
+      toggle.addEventListener("click", () => {
+        if (open) {
+          openEditors.delete(target.recordId);
+          executionDrafts.delete(target.recordId);
+        } else {
+          openEditors.add(target.recordId);
+        }
+        refreshExecutionViews();
+      });
+      exec.append(toggle);
+      item.append(exec);
+      if (open) {
+        item.append(buildExecutionEditor(
+          target, "儲存修正",
+          (payload) => dispatch({ type: "amendExecution", ...target.payload, ...payload }),
+          () => { openEditors.delete(target.recordId); refreshExecutionViews(); },
+        ));
+      }
+    }
     return item;
   });
 
@@ -835,7 +1195,10 @@ function applyState(state) {
   syncClientViewStatus(state);
   syncOverlayStatus(state);
   syncPoints(state);
-  syncLedger(state);
+  withFocusKept(() => {
+    syncAssistantQueue(state);
+    syncLedger(state);
+  });
 }
 
 // ---- 事件 ----------------------------------------------------------------
@@ -882,6 +1245,25 @@ elements.overlayClose.addEventListener("click", () => {
 });
 
 elements.undoButton.addEventListener("click", () => dispatch({ type: "undoLedger" }));
+// 結束正在執行並把該步驟勾完成；步驟早就勾過完成（又再介入一次）也收得掉。
+elements.assistantDone.addEventListener("click", async () => {
+  if (!window.WozStore.state?.assistantCurrent) return;
+  const result = await dispatch({ type: "finishCurrent" });
+  if (result && result.changed === false && window.WozStore.state?.assistantCurrent) {
+    window.alert("server 沒有收掉正在執行的項目。請重新啟動 server（新功能需要重啟才會生效）。");
+  }
+});
+elements.assistantStop.addEventListener("click", () => {
+  if (openEditors.has("stop")) {
+    openEditors.delete("stop");
+    const current = window.WozStore.state?.assistantCurrent;
+    const target = current && itemTarget(window.WozStore.state, current);
+    if (target) executionDrafts.delete(target.recordId);
+  } else {
+    openEditors.add("stop");
+  }
+  refreshExecutionViews();
+});
 document.querySelectorAll("[data-actor-error]").forEach((button) => {
   button.textContent = window.ACTOR_SPEECH.explanation[button.dataset.actorError];
   button.addEventListener("click", () => {

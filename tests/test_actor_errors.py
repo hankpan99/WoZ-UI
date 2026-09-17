@@ -35,6 +35,7 @@ class ActorErrorTests(unittest.TestCase):
         state = recipe_state.default_state()
         recipe_state.apply_action(state, {"type": "setActorError", "message": "無法辨識此指令"})
         recipe_state.apply_action(state, {"type": "repeatHelped", "key": "0:0", "mode": "voice"})
+        recipe_state.apply_action(state, {"type": "setHelpOverlay", "key": "0:0"})
         self.assertIsNone(state["actorError"])
         self.assertEqual(state["helpOverlay"], "0:0")
 

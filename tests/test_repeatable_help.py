@@ -23,6 +23,9 @@ class RepeatableHelpTests(unittest.TestCase):
                 recipe_state.apply_action(state, {
                     "type": "repeatHelped", "key": key, "mode": "physical", "cost": 2,
                 })
+                # 模式 1 只排進佇列，要 wizard 按顯示字卡才開卡。
+                self.assertIsNone(state["helpOverlay"])
+                recipe_state.apply_action(state, {"type": "setHelpOverlay", "key": key})
                 self.assertEqual(state["helpOverlay"], key)
 
                 self.select_only(state, key, [2])

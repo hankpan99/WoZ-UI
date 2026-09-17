@@ -82,6 +82,15 @@
   --points-label-size: 2.3rem;
   --points-value-size: 3rem;
   --progress-count-size: 1.8rem;
+  /* 中間的「Alex正在執行／準備執行」列 */
+  --assistant-status-height: 72px;
+  /* 左邊（正在執行）比右邊（準備執行）寬 */
+  --assistant-now-width: minmax(0, 1.5fr);
+  --assistant-next-width: minmax(0, 1fr);
+  --assistant-padding: 0 26px;
+  --assistant-label-size: 1.6rem;
+  --assistant-text-size: 1.6rem;
+  --assistant-pill-size: 1.15rem;
   --step-name-size: 2rem;
   --step-index-size: 1.5rem;
   --cost-size: 1.5rem;
@@ -149,7 +158,7 @@ button { color: inherit; }
 
 .app-shell {
   display: grid;
-  grid-template-rows: var(--top-panel-height) minmax(0, 1fr);
+  grid-template-rows: var(--top-panel-height) var(--assistant-status-height) minmax(0, 1fr);
   gap: 14px;
   width: calc(100% - 28px);
   height: 100vh;
@@ -207,6 +216,34 @@ button { color: inherit; }
 /* 上面兩條的 display: block 會蓋掉瀏覽器內建的 [hidden]，所以要自己寫一次。
    （client.js 的 SHOW_STEP_COST 用這個把「此步驟剩餘…」整行收掉。） */
 .stat-label[hidden], .stat-value[hidden] { display: none; }
+
+/* 上下兩塊中間：左＝Alex 正在執行，右＝Alex 準備執行（佇列）。
+   高度固定（--assistant-status-height），文字不換行：左邊放不下就變成「…」。 */
+.assistant-status {
+  display: grid;
+  grid-template-columns: var(--assistant-now-width) var(--assistant-next-width);
+  gap: 1px;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--line);
+}
+.assistant-slot { display: flex; gap: 12px; align-items: center; min-width: 0; padding: var(--assistant-padding); overflow: hidden; background: var(--white); white-space: nowrap; }
+.assistant-now { background: var(--helped-bg); }
+.assistant-label { flex-shrink: 0; color: var(--ink); font-size: var(--assistant-label-size); font-weight: 650; }
+.assistant-text { min-width: 0; overflow: hidden; font-size: var(--assistant-text-size); font-weight: 750; line-height: 1.3; text-overflow: ellipsis; }
+.assistant-now .assistant-text { color: var(--helped-badge-text); }
+.assistant-text.is-empty { color: var(--ink); font-weight: 600; }
+/* 準備執行的每一項都是一顆膠囊（外觀同步驟卡上的花費），顏色依主動程度：
+   1 被動＝橘、2 語音提醒＝綠、3 詢問後＝藍、4 直接＝紫。 */
+.assistant-queue { display: flex; gap: 6px; align-items: center; min-width: 0; overflow: hidden; }
+.queue-pill { flex-shrink: 0; padding: 4px 10px; border: 1px solid; border-radius: 99px; font-size: var(--assistant-pill-size); font-weight: 750; white-space: nowrap; }
+.queue-pill.level-1 { color: var(--helped-badge-text); border-color: var(--helped-border); background: var(--helped-bg); }
+.queue-pill.level-2 { color: var(--reminder-text); border-color: var(--reminder-border); background: var(--reminder-bg); }
+.queue-pill.level-3 { color: var(--proactive-text); border-color: var(--proactive-border); background: var(--proactive-bg); }
+.queue-pill.level-4 { color: var(--direct-text); border-color: var(--direct-border); background: var(--direct-bg); }
+.queue-more { flex-shrink: 0; color: var(--muted); font-size: var(--assistant-pill-size); font-weight: 750; }
 
 .recipe-stage {
   display: grid;
@@ -550,7 +587,7 @@ button { color: inherit; }
 .offline-banner code { padding: 2px 6px; border-radius: 5px; background: rgba(255, 255, 255, .22); font-size: .95em; }
 
 @media (max-height: 760px) {
-  .app-shell { grid-template-rows: var(--top-panel-height-compact) minmax(0, 1fr); gap: 10px; padding: 10px 0; }
+  .app-shell { grid-template-rows: var(--top-panel-height-compact) var(--assistant-status-height) minmax(0, 1fr); gap: 10px; padding: 10px 0; }
   .stat-card { padding: 15px 22px; }
   .stage-title .meal-label { font-size: 1.5rem; }
   .stat-value { font-size: 1.8rem; }
@@ -568,6 +605,11 @@ button { color: inherit; }
     --help-card-legend-size: 1rem;
     --help-card-cost-label-size: 1.35rem;
     --help-card-cost-size: 2.8rem;
+    --assistant-status-height: 52px;
+    --assistant-padding: 0 22px;
+    --assistant-label-size: 1.15rem;
+    --assistant-text-size: 1.15rem;
+    --assistant-pill-size: .95rem;
   }
 }
 
