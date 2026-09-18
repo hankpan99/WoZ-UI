@@ -12,9 +12,19 @@
     const label = document.createElement("dt");
     label.textContent = line.label;
     const text = document.createElement("dd");
-    text.textContent = line.text;
+    text.replaceChildren(...speechText(line));
     card.append(label, text);
     return card;
+  }
+  // 「的部分動作」要單獨標成紅字，其餘照原本的顏色。
+  function speechText(line) {
+    const mark = window.ACTOR_SPEECH.partial;
+    if (!line.partial || !mark || !line.text.includes(mark)) return [line.text];
+    const [head, ...rest] = line.text.split(mark);
+    const highlight = document.createElement("span");
+    highlight.className = "speech-partial";
+    highlight.textContent = mark;
+    return [head, highlight, rest.join(mark)];
   }
   function speechSequence(lines) {
     const sequence = document.createElement("div");
@@ -31,6 +41,23 @@
     });
     return sequence;
   }
+  // 一段主線，後面可以再分叉出幾條支線；支線本身也可以是另一個有分叉的節點。
+  function flowNode(lines, branches) {
+    const main = speechSequence(lines);
+    const nodes = (branches || []).filter(Boolean);
+    if (!nodes.length) return main;
+    const fork = document.createElement("div");
+    fork.className = "flow-branches";
+    nodes.forEach((node) => {
+      node.classList.add("flow-branch");
+      fork.append(node);
+    });
+    const split = document.createElement("div");
+    split.className = "flow-split";
+    split.append(main, fork);
+    return split;
+  }
+  const flowBranch = (lines, branches) => (lines.length ? flowNode(lines, branches) : null);
   function renderSpeech(view) {
     const container = find("speech-lines");
     container.replaceChildren();
@@ -52,21 +79,19 @@
         empty.textContent = "本次未勾選語音提醒動作。";
         flow.append(empty);
       }
-    } else if (view.kind === "inquiry" || view.kind === "direct") {
-      const root = view.kind === "inquiry" ? view.lines.filter((line) => line.when === "pending")
-        : view.lines.filter((line) => !line.when).slice(0, 1);
-      const branches = view.kind === "inquiry"
-        ? [view.lines.filter((line) => line.when === "accepted"), view.lines.filter((line) => line.when === "declined")]
-        : [view.lines.filter((line) => !line.when).slice(1), view.lines.filter((line) => line.when === "stop")];
-      if (root.length) flow.append(speechSequence(root));
-      const fork = document.createElement("div");
-      fork.className = "flow-branches";
-      branches.filter((lines) => lines.length).forEach((lines) => {
-        const branch = speechSequence(lines);
-        branch.classList.add("flow-branch");
-        fork.append(branch);
-      });
-      flow.append(fork);
+    } else if (view.kind === "physical" || view.kind === "inquiry" || view.kind === "direct") {
+      const at = (when) => view.lines.filter((line) => (line.when || null) === when);
+      // 三種實體介入的尾巴都一樣：正在執行 →（完成）／（參與者要求停止）。
+      // 詢問後介入只是在前面多一段「先問，接受了才開始執行」。
+      const run = view.kind === "inquiry" ? at("accepted") : at(null);
+      const stop = at("stop");
+      // 有獨立的「要求停止」才需要分叉；沒有就一路接下去，流程圖不會多長一行。
+      const running = stop.length
+        ? flowNode(run.slice(0, 1), [flowBranch(run.slice(1)), flowBranch(stop)])
+        : speechSequence(run);
+      flow.append(view.kind === "inquiry"
+        ? flowNode(at("pending"), [running, flowBranch(at("declined"))])
+        : running);
     } else {
       flow.append(speechSequence(view.lines));
     }

@@ -71,6 +71,9 @@
     };
     const details = action.details || [];
     const picked = new Set(proactive ? proactiveDetails(action) : pickedDetails(state, key, details.length));
+    // 只做這個步驟的一部分（被動＝wizard 的勾選，主動＝Excel「介入」欄的範圍）：
+    // 「正在執行 / 需要我幫你執行」那兩句要多講「的部分動作」。
+    const partial = details.length > 0 && picked.size < details.length;
     const response = proactive ? state.proactive?.[key]?.status || "pending" : null;
     const answer = direct && response === "pending" ? null : response;
     const context = {
@@ -98,7 +101,12 @@
       lines: templates.map((line) => ({
         label: line.label,
         when: line.when || null,
-        text: line.text.replace(/\{(step|action|name|details)\}/g, (_, token) => context[token]),
+        // 有沒有紅字要標；沒有 {partial} 的語句（完成、好的、語音逐條）永遠是 false。
+        partial: partial && line.text.includes("{partial}"),
+        text: line.text
+          .replace(/\{partial\}/g, partial ? speech.partial || "" : "")
+          .replace(/\{(step|action|name|details)\}/g, (_, token) => context[token])
+          .replace(/\s+$/, ""),
         active: direct && answer === "declined" ? line.when === "stop"
           : (!line.when || line.when === answer),
       })),

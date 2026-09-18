@@ -13,6 +13,8 @@
   --actor-detail-size: var(--help-card-item-size);
   /* 等待介入且有目前步驟預覽時的大標題字級（比純等待畫面小一些）。 */
   --actor-idle-preview-title-size: clamp(2rem, 3vw, 3rem);
+  /* 只做部分動作時，語句裡「的部分動作」那幾個字的顏色。 */
+  --actor-partial-color: #c62828;
 }
 body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: var(--soft); }
 .actor-shell { height: 100%; display: grid; grid-template-rows: minmax(0, var(--actor-top-height)) minmax(0, var(--actor-bottom-height)); gap: 16px; }
@@ -54,6 +56,10 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .flow-branches { display: flex; flex: 0 1 auto; flex-direction: column; gap: 16px; min-width: 0; padding-left: 28px; border-left: 2px solid var(--line); }
 .flow-branch { position: relative; }
 .flow-branch::before { content: "→"; position: absolute; left: -27px; color: var(--helped-badge-text); font-size: 1.7rem; }
+/* 主線後面還要再分叉的那一段（例：接受 → 正在執行 →（完成）／（要求停止））。 */
+.flow-split { position: relative; display: flex; align-items: center; gap: 28px; min-width: 0; max-width: 100%; }
+.flow-split::before { top: 50%; transform: translateY(-50%); }
+.speech-partial { color: var(--actor-partial-color); }
 .flow-arrow { flex-shrink: 0; color: var(--helped-badge-text); font-size: 1.8rem; }
 .speech-line { margin: 0; }
 .flow-card { flex: 0 1 auto; width: max-content; max-width: min(36rem, 100%); min-width: 0; padding: 18px 22px; border: 2px solid var(--helped-border); border-radius: 16px; background: var(--helped-bg); }
@@ -70,7 +76,7 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .speech-line.is-inactive { border-style: dashed; background: var(--panel-bg); }
 .speech-line.is-inactive dd { opacity: .65; }
 @media (max-width: 900px) {
-  .speech-flow { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .speech-flow, .flow-split { flex-direction: column; align-items: flex-start; gap: 16px; }
   .flow-branches { flex: auto; }
   .flow-sequence { flex-wrap: wrap; }
 }

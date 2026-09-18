@@ -12,6 +12,9 @@ const slides = [{ step: "1", meal: "蛋糕", stage: "製作", actions: [
 ] }];
 const initial = { currentIndex: 0, helpOverlay: null, proactiveOverlay: null, helpModes: {}, helpDetails: {}, proactive: {} };
 const view = (state, data = slides) => window.ActorModel.view(state, data, window.ACTOR_SPEECH);
+// 語句樣板換掉代號之後應該長的樣子；partial 是「的部分動作」，全部都做時是空字串。
+const say = (template, step, partial = "") =>
+  template.replace("{step}", step).replace("{partial}", partial).replace(/\s+$/, "");
 assert.equal(view(initial), null);
 assert.equal(view({ ...initial, actorOverlay: null, helpOverlay: "0:0" }), null);
 assert.equal(view({ ...initial, actorOverlay: { key: "0:0", proactive: false, mode: "voice_reminder", details: [1] } }).kind, "voice_reminder");
@@ -48,7 +51,7 @@ assert.deepEqual(toggled.lines.map(line => [line.label, line.text]), [["動作 0
 assert.deepEqual(toggled.details.map(detail => detail.selected), [true, false]);
 assert.deepEqual(view({ ...reminderState, helpDetails: { "0:0": [] } }).lines, []);
 assert.equal(view({ ...reminderState, helpDetails: {} }).lines.length, 2);
-assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].text, window.ACTOR_SPEECH.physical[0].text.replace("{step}", "A"));
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].text, say(window.ACTOR_SPEECH.physical[0].text, "A"));
 const inquiry = { ...initial, proactiveOverlay: "0:0", helpDetails: { "0:0": [0] } };
 assert.deepEqual(view(inquiry).lines.map(x => x.active), [true, false, false, false]);
 assert.deepEqual(view(inquiry).details.map(x => x.selected), [false, true], "Proactive scope comes from Excel");
@@ -64,9 +67,20 @@ const executed = view({ ...initial, helpOverlay: "0:0", helped: { "0:0": 2 } });
 assert.equal(executed.cost, 2);
 assert.equal(executed.costLabel, "本次花費");
 assert.equal(direct.answer, null, "Direct intervention does not wait for permission");
-assert.equal(direct.lines[0].text, window.ACTOR_SPEECH.direct[0].text.replace("{step}", "B"));
+assert.equal(direct.lines[0].text, say(window.ACTOR_SPEECH.direct[0].text, "B"));
 assert.deepEqual(view({ ...initial, proactiveOverlay: "0:1", proactive: { "0:1": { status: "declined" } } }).lines.map(x => x.active), [false, false, true]);
 assert.equal(view({ ...voiceState, currentIndex: 99 }).name, "攪拌", "Read the overlay's page, not the browsed page");
+const mark = window.ACTOR_SPEECH.partial;
+const partialHelp = view({ ...initial, helpOverlay: "0:0", helpDetails: { "0:0": [0] } });
+assert.equal(partialHelp.lines[0].text, say(window.ACTOR_SPEECH.physical[0].text, "A", mark));
+assert.deepEqual(partialHelp.lines.map(x => x.partial), [true, false, false], "Only 執行/詢問 says 的部分動作");
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].partial, false, "All details picked is the whole step");
+assert.ok(!view({ ...initial, helpOverlay: "0:0" }).lines[0].text.includes(mark));
+assert.deepEqual(view(inquiry).lines.map(x => x.partial), [true, true, false, false], "Proactive scope comes from Excel");
+assert.equal(view(inquiry).lines[0].text, say(window.ACTOR_SPEECH.inquiry[0].text, "A", mark));
+assert.equal(direct.lines[0].partial, false, "0:1 marks its only detail, so it is the whole step");
+assert.deepEqual(view({ ...voiceState, helpDetails: { "0:0": [1] } }).lines.map(x => x.partial), [false], "Voice lines have no {partial}");
+
 const idle = (state, data = slides) => window.ActorModel.idle(state, data);
 const idleFirst = idle(initial);
 assert.equal(idleFirst.kind, "idle");
@@ -82,4 +96,4 @@ assert.equal(idle({ ...initial, done: ["0:0"], clientViewKey: "0:0" }).name, "�
 assert.equal(idle({ ...initial, currentIndex: 99 }), null);
 assert.equal(idle({ ...initial, clientViewKey: "99:0" }), null);
 assert.equal(idle(initial, [{ step: "1", actions: [] }]), null);
-console.log("Actor model checks passed: voice, physical, inquiry, direct, selections, waiting, idle preview, and no state mutation");
+console.log("Actor model checks passed: voice, physical, inquiry, direct, selections, waiting, partial scope, idle preview, and no state mutation");
