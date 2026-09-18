@@ -135,6 +135,9 @@
     find("action-name").textContent = top?.name || "";
     find("action-name").hidden = !top || top.kind === "error";
     find("speech-empty").hidden = Boolean(view);
+    // 小狀況只跟著介入字卡出現；等待介入的畫面不顯示。
+    find("situation-text").textContent = view?.situation || "";
+    find("situation").hidden = !view?.situation;
     find("answer").hidden = !view?.answer || view.answer === "pending";
     find("answer").textContent = { accepted: "參與者已接受", declined: "參與者已拒絕" }[view?.answer] || "";
     find("answer").dataset.answer = view?.answer || "";

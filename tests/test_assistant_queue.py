@@ -219,6 +219,31 @@ class AssistantQueueTests(unittest.TestCase):
         self.assertEqual(state["actorError"], "unrecognized")
         self.assertIsNone(state["actorOverlay"])
 
+    def test_situation_toggle_defaults_to_on(self):
+        """Excel 有寫小狀況的步驟才有開關，預設開，關掉只影響那一步。"""
+        key = next((f"{i}:{j}" for i, slide in enumerate(recipe_state.SLIDES or [])
+                    for j, action in enumerate(slide["actions"]) if action.get("situation")), None)
+        self.assertIsNotNone(key, "食譜裡至少要有一個小狀況，否則這個測試沒有意義")
+        state = recipe_state.default_state()
+        self.assertEqual(state["situations"], {})
+        self.assertTrue(state["situations"].get(key, True))
+
+        _, changed = act(state, type="setSituation", key=key, value=False)
+        self.assertTrue(changed)
+        self.assertFalse(state["situations"][key])
+        _, changed = act(state, type="setSituation", key=key, value=False)
+        self.assertFalse(changed, "已經是關的就不算變更")
+        _, changed = act(state, type="setSituation", key=key, value=True)
+        self.assertTrue(changed)
+        self.assertTrue(state["situations"][key])
+
+        plain = next(f"{i}:{j}" for i, slide in enumerate(recipe_state.SLIDES or [])
+                     for j, action in enumerate(slide["actions"]) if not action.get("situation"))
+        _, changed = act(state, type="setSituation", key=plain, value=False)
+        self.assertFalse(changed, "Excel 沒寫小狀況的步驟沒有這個開關")
+        _, changed = act(state, type="setSituation", key="99:9", value=False)
+        self.assertFalse(changed)
+
     def test_undo_and_reset_clear_items(self):
         state = recipe_state.default_state()
         act(state, type="repeatHelped", key="0:0", mode="physical", cost=6)

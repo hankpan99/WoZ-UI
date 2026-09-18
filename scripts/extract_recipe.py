@@ -32,6 +32,8 @@ PROACTIVE_HEADER = "介入"
 PROACTIVE_MARK = "O"
 PROACTIVE_LEVEL_HEADER = "主動程度"
 PROACTIVE_LEVELS = {"3. 詢問後", "4. 直接"}
+# 這個步驟要請 Alex 故意做出的小失誤，寫在「步驟名稱」那一列。
+SITUATION_HEADER = "小狀況"
 
 
 def worksheet_path(archive):
@@ -103,6 +105,8 @@ def extract():
         proactive_column = columns.get(PROACTIVE_HEADER)
         # 舊版 Excel 沒有「主動程度」時，前端會沿用原本的「3. 詢問後」。
         proactive_level_column = columns.get(PROACTIVE_LEVEL_HEADER)
+        # 「小狀況」同樣不是必要欄位：沒有就當成每個步驟都照正常做。
+        situation_column = columns.get(SITUATION_HEADER)
 
         for row in rows:
             meal = row.get(columns["餐點"], "")
@@ -138,6 +142,9 @@ def extract():
                     # 「介入」欄標 O 的那幾條詳細動作的索引，沒有就是空陣列。
                     "proactive": [],
                 }
+                situation = (row.get(situation_column) or "").strip() if situation_column else ""
+                if situation:
+                    current_action["situation"] = " ".join(situation.split())
                 if current_action["cost"] != 0 and current_action["cost"].is_integer():
                     current_action["cost"] = int(current_action["cost"])
                 current_slide["actions"].append(current_action)

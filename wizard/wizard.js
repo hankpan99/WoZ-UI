@@ -306,6 +306,19 @@ function buildStepList() {
         dispatch({ type: "setHelpOverlay", key: showing ? null : key });
       });
 
+      // Excel「小狀況」欄有寫的步驟才有這顆。開著＝Actor 字卡會帶出小狀況，
+      // 這一位參與者不想跑就按成關，之後再按回來。
+      const situationButton = action.situation ? document.createElement("button") : null;
+      if (situationButton) {
+        situationButton.type = "button";
+        situationButton.className = "situation-button";
+        situationButton.dataset.role = "situation";
+        situationButton.textContent = `小狀況：${action.situation}`;
+        situationButton.addEventListener("click", () => {
+          dispatch({ type: "setSituation", key, value: !situationButton.classList.contains("is-on") });
+        });
+      }
+
       helpRow.append(
         interventionModes,
         Object.assign(document.createElement("span"), { className: "cost-caption", textContent: "花費" }),
@@ -314,6 +327,7 @@ function buildStepList() {
         executeButton,
         overlayButton,
       );
+      if (situationButton) helpRow.append(situationButton);
       helpRow.append(Object.assign(document.createElement("span"), {
         className: "repeatable-hint",
         textContent: "先選模式與動作，再按執行介入才扣點並新增紀錄。",
@@ -597,6 +611,15 @@ function syncStepList(state) {
     clientViewButton.classList.toggle("is-on", isClientView);
     clientViewButton.setAttribute("aria-pressed", String(isClientView));
     clientViewButton.title = isClientView ? "取消預覽此步驟，回到當前步驟" : "預覽此步驟";
+    const situationButton = row.querySelector('[data-role="situation"]');
+    if (situationButton) {
+      const on = state.situations?.[key] !== false;
+      situationButton.classList.toggle("is-on", on);
+      situationButton.setAttribute("aria-pressed", String(on));
+      situationButton.title = on
+        ? "開：Actor 字卡會顯示小狀況。按一下這次不做。"
+        : "關：這次照正常做，Actor 不會看到小狀況。";
+    }
 
     syncProactiveRow(row, key, action, proactive[key], proactiveOverlayKey === key, busyText);
   });

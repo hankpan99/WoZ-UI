@@ -72,6 +72,12 @@ def action_details(key):
     return list(action.get("details") or []) if action else []
 
 
+def action_situation(key):
+    """Excel「小狀況」欄：這個步驟要請 Alex 故意做出的小失誤，沒有就回 ""。"""
+    action = _action_at(key)
+    return (action.get("situation") or "") if action else ""
+
+
 def action_proactive(key):
     """助手主動提議時要代勞的詳細步驟索引（Excel「介入」欄標 O 的那幾條）。
 
@@ -131,6 +137,8 @@ def default_state():
         "supportedHelpModes": ["physical", "voice", "voice_reminder"],
         # key -> 這次要代勞的詳細步驟索引。沒有紀錄＝全部勾選（見 selected_details）。
         "helpDetails": {},
+        # Excel 有寫「小狀況」的步驟，這次要不要請 Alex 照做。沒有紀錄＝要（預設開）。
+        "situations": {},
         # client 上正在顯示的整頁說明卡，或 None。
         "helpOverlay": None,
         "actorOverlay": None,
@@ -517,6 +525,16 @@ def apply_action(state, action):
         state["actorError"] = message
         if message:
             state["actorOverlay"] = None
+
+    elif kind == "setSituation":
+        # Excel 寫了小狀況的步驟才有這個開關；預設是開，關掉這次就照正常做。
+        key = action.get("key")
+        if not isinstance(key, str) or not action_situation(key):
+            return state, False
+        value = bool(action.get("value"))
+        if state.setdefault("situations", {}).get(key, True) == value:
+            return state, False
+        state["situations"][key] = value
 
     elif kind == "closeActorOverlay":
         if not state.get("actorOverlay") and not state.get("actorError"):

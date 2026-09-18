@@ -81,6 +81,20 @@ assert.equal(view(inquiry).lines[0].text, say(window.ACTOR_SPEECH.inquiry[0].tex
 assert.equal(direct.lines[0].partial, false, "0:1 marks its only detail, so it is the whole step");
 assert.deepEqual(view({ ...voiceState, helpDetails: { "0:0": [1] } }).lines.map(x => x.partial), [false], "Voice lines have no {partial}");
 
+// Excel「小狀況」：wizard 沒關掉就跟著字卡出現。
+const situationSlides = [{ step: "1", meal: "蛋糕", stage: "製作", actions: [
+  { ...slides[0].actions[0], situation: "沒有攪拌均勻" },
+  slides[0].actions[1],
+] }];
+const situationView = (state) => view(state, situationSlides);
+assert.equal(situationView({ ...initial, helpOverlay: "0:0" }).situation, "沒有攪拌均勻");
+assert.equal(situationView({ ...initial, helpOverlay: "0:0", situations: { "0:0": false } }).situation, "",
+  "Wizard 關掉這一步就不顯示");
+assert.equal(situationView({ ...initial, helpOverlay: "0:0", situations: { "0:1": false } }).situation, "沒有攪拌均勻",
+  "關掉的是別的步驟");
+assert.equal(situationView({ ...initial, proactiveOverlay: "0:0" }).situation, "沒有攪拌均勻", "主動介入也帶得出來");
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).situation, "", "Excel 沒寫就沒有小狀況");
+
 const idle = (state, data = slides) => window.ActorModel.idle(state, data);
 const idleFirst = idle(initial);
 assert.equal(idleFirst.kind, "idle");

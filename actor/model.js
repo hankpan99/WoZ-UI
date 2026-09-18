@@ -94,6 +94,8 @@
       costLabel: proactive && !state.proactive?.[key]?.status ? "接受將花費" : "本次花費",
       category: proactive || mode === "voice_reminder" ? "proactive" : "passive",
       page: slide.step, actionNumber: actionIndex + 1, image: slide.image || "",
+      // Excel 寫的小狀況，wizard 沒有把這一步關掉才要顯示。
+      situation: state.situations?.[key] === false ? "" : action.situation || "",
       level: proactive ? (direct ? "4" : "3") : (mode === "voice_reminder" ? "2" : "1"),
       title: proactive ? `實體介入（${proactiveLevel(action)}）` : (titles[mode] || titles.physical),
       name: action.name,

@@ -460,6 +460,20 @@ h2, h3 { margin: 0; }
 .overlay-button.is-on { color: var(--white); border-color: var(--helped-border); background: var(--helped-border); }
 .step-row.is-showing { box-shadow: 0 0 0 2px var(--helped-border); }
 
+/* Excel「小狀況」的開關。開著（預設）＝這一步的 Actor 字卡會帶出小狀況。 */
+.situation-button {
+  padding: 5px 11px;
+  border: 1px dashed #c62828;
+  border-radius: 99px;
+  background: var(--white);
+  color: #c62828;
+  font-size: .8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.situation-button.is-on { border-style: solid; background: #c62828; color: var(--white); }
+.situation-button:not(.is-on) { opacity: .55; text-decoration: line-through; }
+
 /* ===== 助手主動提議 ===== */
 /* 只有 Excel「介入」欄標過 O 的步驟才有這一列。 */
 .proactive-row {
