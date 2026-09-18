@@ -1,4 +1,7 @@
 (function () {
+  // 沒有介入指令時，上方區塊要不要顯示參與者目前這一步的圖片與詳細動作（跟 Client 畫面同步）。
+  // 設成 false 就回到只有「等待介入指令」一行字的樣子。
+  const SHOW_IDLE_PREVIEW = true;
   const find = (id) => document.getElementById(id);
   let currentView = null;
   function speechCard(line) {
@@ -92,28 +95,33 @@
   }
   function render(state) {
     const view = window.ActorModel.view(state, window.RECIPE_SLIDES || [], window.ACTOR_SPEECH);
-    if (view?.key !== currentView?.key) find("detail-scroll").scrollTop = 0;
-    currentView = view;
+    // 上方區塊：有介入就顯示介入內容，沒有的話（且旗標開著）顯示參與者目前這一步。
+    const preview = view || !SHOW_IDLE_PREVIEW
+      ? null : window.ActorModel.idle(state, window.RECIPE_SLIDES || []);
+    const top = view || preview;
+    if (top?.key !== currentView?.key) find("detail-scroll").scrollTop = 0;
+    currentView = top;
     document.querySelector(".actor-shell").classList.toggle("is-idle", !view);
+    document.querySelector(".actor-shell").classList.toggle("has-idle-preview", Boolean(preview));
     document.querySelector(".actor-shell").classList.toggle("is-error", view?.kind === "error");
     document.querySelector(".actor-shell").dataset.level = view?.level || "1";
     find("intervention-title").textContent = view?.title || "等待介入指令";
-    find("step-label").textContent = view?.step || "";
-    find("action-name").textContent = view?.name || "";
-    find("action-name").hidden = !view || view.kind === "error";
+    find("step-label").textContent = top?.step || "";
+    find("action-name").textContent = top?.name || "";
+    find("action-name").hidden = !top || top.kind === "error";
     find("speech-empty").hidden = Boolean(view);
     find("answer").hidden = !view?.answer || view.answer === "pending";
     find("answer").textContent = { accepted: "參與者已接受", declined: "參與者已拒絕" }[view?.answer] || "";
     find("answer").dataset.answer = view?.answer || "";
     if (view?.kind === "direct" && view.answer === "declined") find("answer").textContent = "參與者要求停止";
     renderSpeech(view);
-    find("detail-list").replaceChildren(...(view?.details || []).map((detail) => {
+    find("detail-list").replaceChildren(...(top?.details || []).map((detail) => {
       const item = document.createElement("li");
       item.textContent = detail.text;
       item.classList.toggle("is-off", !detail.selected);
       return item;
     }));
-    find("details-empty").hidden = !view || view.kind === "error" || Boolean(view.details.length);
+    find("details-empty").hidden = !top || top.kind === "error" || Boolean(top.details.length);
     showImage();
     fitDetails();
   }

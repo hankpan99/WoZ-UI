@@ -177,6 +177,48 @@ class AssistantQueueTests(unittest.TestCase):
         _, changed = act(state, type="finishCurrent")
         self.assertFalse(changed)
 
+    def test_finishing_execution_closes_the_actor_card(self):
+        """完成／喊停＝這次介入結束，Actor UI 跟著回到等待畫面。"""
+        for closing in ("finish", "stop"):
+            with self.subTest(closing=closing):
+                state = recipe_state.default_state()
+                act(state, type="repeatHelped", key="0:0", mode="physical", cost=6)
+                act(state, type="setHelpOverlay", key="0:0")
+                self.assertEqual(state["actorOverlay"]["key"], "0:0")
+                act(state, type="setHelpOverlay", key=None)
+                # 關掉說明卡開始執行時，Actor 還要看著卡片做事。
+                self.assertEqual(state["assistantCurrent"]["key"], "0:0")
+                self.assertEqual(state["actorOverlay"]["key"], "0:0")
+
+                if closing == "finish":
+                    act(state, type="finishCurrent")
+                else:
+                    act(state, type="stopCurrent", details=[0])
+                self.assertIsNone(state["assistantCurrent"])
+                self.assertIsNone(state["actorOverlay"])
+
+        # 執行期間 wizard 另外叫出別的步驟的卡片：收尾不能把那張一起關掉。
+        state = recipe_state.default_state()
+        act(state, type="repeatHelped", key="0:0", mode="physical", cost=6)
+        act(state, type="setHelpOverlay", key="0:0")
+        act(state, type="setHelpOverlay", key=None)
+        act(state, type="setProactiveOverlay", key=PROACTIVE_KEY)
+        self.assertEqual(state["actorOverlay"]["key"], PROACTIVE_KEY)
+        act(state, type="finishCurrent")
+        self.assertIn("0:0", state["done"])
+        self.assertEqual(state["actorOverlay"]["key"], PROACTIVE_KEY)
+        self.assertEqual(state["proactiveOverlay"], PROACTIVE_KEY)
+
+        # actorError 是另一個畫面，完成不該把它清掉。
+        state = recipe_state.default_state()
+        act(state, type="repeatHelped", key="0:0", mode="physical", cost=6)
+        act(state, type="setHelpOverlay", key="0:0")
+        act(state, type="setHelpOverlay", key=None)
+        act(state, type="setActorError", message="unrecognized")
+        act(state, type="finishCurrent")
+        self.assertEqual(state["actorError"], "unrecognized")
+        self.assertIsNone(state["actorOverlay"])
+
     def test_undo_and_reset_clear_items(self):
         state = recipe_state.default_state()
         act(state, type="repeatHelped", key="0:0", mode="physical", cost=6)

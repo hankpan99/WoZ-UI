@@ -11,6 +11,8 @@
   /* 模式 2 每欄最小寬度；調小可在同一排放更多欄。 */
   --actor-reminder-column-width: 22rem;
   --actor-detail-size: var(--help-card-item-size);
+  /* 等待介入且有目前步驟預覽時的大標題字級（比純等待畫面小一些）。 */
+  --actor-idle-preview-title-size: clamp(2rem, 3vw, 3rem);
 }
 body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: var(--soft); }
 .actor-shell { height: 100%; display: grid; grid-template-rows: minmax(0, var(--actor-top-height)) minmax(0, var(--actor-bottom-height)); gap: 16px; }
@@ -23,7 +25,9 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .actor-shell.is-idle .help-card-name { font-size: clamp(3rem, 4.5vw, 4.5rem); white-space: normal; }
 #speech-empty { margin: 0; text-align: center; color: #555; font-size: clamp(2.5rem, 4vw, 4rem); font-weight: 750; line-height: 1.35; }
 .actor-shell.is-idle #speech-lines { display: none; }
-.actor-shell.is-idle .help-card-image { display: none; }
+.actor-shell.is-idle:not(.has-idle-preview) .help-card-image { display: none; }
+/* 等待介入時若同時顯示目前步驟預覽，標題讓一點空間給圖片與詳細動作。 */
+.actor-shell.is-idle.has-idle-preview .help-card-name { font-size: var(--actor-idle-preview-title-size); }
 .actor-shell.is-error { --helped-border: #cf5b5b; --helped-bg: #f3baba; --helped-badge-text: #9b2020; }
 .actor-shell.is-error .help-card-body { display: none; }
 .actor-shell.is-error .help-card-name { font-size: clamp(3rem, 4.5vw, 4.5rem); }

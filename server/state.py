@@ -295,6 +295,15 @@ def _close_overlay_for(state, keys):
         state["proactiveOverlay"] = None
 
 
+def _close_actor_overlay_for(state, key):
+    """執行結束（完成／喊停）時把 Actor UI 的卡片一起收掉，等同 wizard 按「關閉 Actor UI 顯示」。
+    只收這一步自己的那一張：執行期間 wizard 可能已經另外叫出別的步驟的卡片，
+    那張還在等參與者回應，不能被上一步的收尾誤關。
+    actorError 是 wizard 另外叫出的說明畫面，維持只能手動關掉。"""
+    if (state.get("actorOverlay") or {}).get("key") == key:
+        state["actorOverlay"] = None
+
+
 def _drop_proactive_entries(state, key):
     """把某個步驟的主動提議帳目全部拿掉（「接受」1 筆、「不接受」2 筆）。"""
     state["ledger"] = [
@@ -550,6 +559,7 @@ def apply_action(state, action):
         key = current["key"]
         state["done"] = sorted(set(state["done"]) | {key}, key=_key_order)
         _close_overlay_for(state, {key})
+        _close_actor_overlay_for(state, key)
         state["assistantCurrent"] = None
 
     elif kind == "setDoneBulk":
@@ -784,6 +794,7 @@ def apply_action(state, action):
                 return state, False
         elif not _amend_proactive(state, current["key"], details, cost):
             return state, False
+        _close_actor_overlay_for(state, current["key"])
         state["assistantCurrent"] = None
 
     elif kind == "cancelQueued":

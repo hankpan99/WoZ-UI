@@ -8,6 +8,34 @@
     }
     return label;
   }
+  // 沒有介入指令時，Actor 上方要跟 Client 看同一個步驟：
+  // Wizard 有指定預覽步驟就跟著它，否則是本頁第一個還沒完成的步驟（整頁完成就停在最後一步）。
+  function idleKey(state, slides) {
+    if (state.clientViewKey) return state.clientViewKey;
+    const pageIndex = state.currentIndex || 0;
+    const actions = slides[pageIndex]?.actions || [];
+    if (!actions.length) return null;
+    const done = new Set(state.done || []);
+    const index = actions.findIndex((_action, position) => !done.has(`${pageIndex}:${position}`));
+    return `${pageIndex}:${index === -1 ? actions.length - 1 : index}`;
+  }
+  // 只給上方區塊用的顯示資料：沒有語句、沒有花費，純粹讓 Actor 知道參與者正在做哪一步。
+  function idle(state, slides) {
+    const key = idleKey(state, slides);
+    if (!key) return null;
+    const [pageIndex, actionIndex] = key.split(":").map(Number);
+    const slide = slides[pageIndex];
+    const action = slide?.actions[actionIndex];
+    if (!action) return null;
+    return {
+      key: `idle:${key}`, kind: "idle", answer: null, level: "1",
+      page: slide.step, actionNumber: actionIndex + 1, image: slide.image || "",
+      name: action.name,
+      step: `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`,
+      lines: [],
+      details: (action.details || []).map((text) => ({ text, selected: true })),
+    };
+  }
   function view(state, slides, speech) {
     if (state.actorError) return {
       key: `error:${state.actorError}`, kind: "error", title: "向參與者說明", level: "error",
@@ -77,5 +105,5 @@
       details: details.map((text, index) => ({ text, selected: picked.has(index) })),
     };
   }
-  window.ActorModel = { view };
+  window.ActorModel = { view, idle };
 })();
