@@ -4,6 +4,7 @@ const slides = window.RECIPE_SLIDES || [];
 const {
   actionKey, formatPoints, formatDelta, cleanLabel, pickedDetails, helpCost,
   proactiveDetails, proactiveLevel, proactiveCost, helpOverlayEntry, executedCost,
+  CUSTOM_NAME, isCustomKey, customCard,
 } = window.WozFormat;
 const { dispatch } = window.WozStore;
 
@@ -39,6 +40,16 @@ const elements = {
   assistantQueueCount: document.querySelector("#assistant-queue-count"),
   assistantQueueList: document.querySelector("#assistant-queue-list"),
   assistantBusyHint: document.querySelector("#assistant-busy-hint"),
+  customStart: document.querySelector("#custom-start"),
+  customHint: document.querySelector("#custom-hint"),
+  customEditor: document.querySelector("#custom-editor"),
+  customRowForm: document.querySelector("#custom-row-form"),
+  customRowInput: document.querySelector("#custom-row-input"),
+  customRowList: document.querySelector("#custom-row-list"),
+  customRowEmpty: document.querySelector("#custom-row-empty"),
+  customCost: document.querySelector("#custom-cost"),
+  customConfirm: document.querySelector("#custom-confirm"),
+  customCancel: document.querySelector("#custom-cancel"),
 };
 
 let currentIndex = 0;
@@ -674,6 +685,10 @@ function syncOverlayStatus(state) {
     delete actorStatus.dataset.interventionLevel;
     document.querySelector("#actor-overlay-status-text").textContent =
       `Actor UI 顯示中（向參與者說明）：${window.ACTOR_SPEECH.explanation[state.actorError] || state.actorError}`;
+  } else if (actorOverlay && isCustomKey(actorOverlay.key)) {
+    document.querySelector("#actor-overlay-status-text").textContent =
+      `Actor UI 顯示中（說明卡）：${itemLabel({ key: actorOverlay.key })}`;
+    actorStatus.dataset.interventionLevel = "1";
   } else if (actorOverlay) {
     const [page, step] = actorOverlay.key.split(":").map(Number);
     document.querySelector("#actor-overlay-status-text").textContent =
@@ -703,6 +718,12 @@ function syncOverlayStatus(state) {
     : state.assistantCurrent ? "關閉 Client UI 顯示（排到佇列最前面）" : "關閉 Client UI 顯示（開始執行）";
   if (!key) return;
 
+  if (isCustomKey(key)) {
+    const editing = state.customDraft === key ? "（編輯中，還沒扣點）" : "";
+    elements.overlayStatusText.textContent =
+      `Client UI 顯示中（說明卡）：${itemLabel({ key })}${editing}`;
+    return;
+  }
   const slide = slides[slideIndex];
   const name = slide?.actions[actionIndex]?.name || "";
   const kind = proactiveKey ? "主動提議卡" : "說明卡";
@@ -744,13 +765,28 @@ const EXECUTION_LABELS = {
   queued: "排隊中", running: "執行中", completed: "已完成", stopped: "中途停止", cancelled: "已取消",
 };
 
+// 自訂介入不在 Excel 裡，內容存在 state.customCards；這裡合成一個同形狀的 action，
+// 讓 itemLabel / executionTarget / buildExecutionEditor 都不必再分兩種寫法。
+function customAction(state, key) {
+  const card = customCard(state, key);
+  if (!card) return null;
+  const rows = card.rows || [];
+  return { name: CUSTOM_NAME, cost: rows.length, details: rows };
+}
+
 function locate(key) {
+  const custom = customAction(window.WozStore.state, key);
+  if (custom) return { slideIndex: null, actionIndex: null, slide: null, action: custom };
   const [slideIndex, actionIndex] = key.split(":").map(Number);
   const slide = slides[slideIndex];
   return { slideIndex, actionIndex, slide, action: slide?.actions[actionIndex] };
 }
 
 function itemLabel(item) {
+  if (isCustomKey(item.key)) {
+    const rows = customCard(window.WozStore.state, item.key)?.rows || [];
+    return `${CUSTOM_NAME}　${rows.length} 個動作`;
+  }
   const { slide, actionIndex, action } = locate(item.key);
   return action ? `第${slide.step}頁 · 步驟${stepLabel(actionIndex)}　${action.name}` : item.key;
 }
@@ -945,6 +981,84 @@ function buildExecutionEditor(target, submitLabel, submit, close) {
   return editor;
 }
 
+// ---- 自訂實體介入 --------------------------------------------------------
+
+// 草稿只存在 server（state.customDraft / customCards），wizard 不自己記，
+// 重新整理或換一台機器開控制台都會看到同一張編輯中的卡片。
+// 唯一的例外是 pendingRows：dispatch 送出到 SSE 把新狀態推回來之間有一小段空窗，
+// 連打兩個動作時後一次會讀到舊的清單，所以這段期間先用本地鏡像，
+// 再用 draftChain 依序送出，前一個就不會被蓋掉。
+let pendingRows = null;
+let draftChain = Promise.resolve();
+
+function draftKey() {
+  return window.WozStore.state?.customDraft || null;
+}
+
+const draftRows = () =>
+  pendingRows || customCard(window.WozStore.state, draftKey())?.rows || [];
+
+// change 拿到目前的動作清單、回傳新的清單；花費一律照花費欄位（空白＝自動）。
+function editRows(change) {
+  const key = draftKey();
+  if (!key) return draftChain;
+  const rows = change([...draftRows()]);
+  pendingRows = rows;
+  draftChain = draftChain
+    .then(() => dispatch({ type: "updateCustomIntervention", key, rows, cost: draftCostInput() }))
+    .then(() => { if (pendingRows === rows) pendingRows = null; });
+  return draftChain;
+}
+
+function syncCustomPanel(state) {
+  const key = state.customDraft || null;
+  const card = key ? customCard(state, key) : null;
+  if (!key) pendingRows = null;
+  const rows = (key && pendingRows) || card?.rows || [];
+
+  elements.customStart.disabled = Boolean(card);
+  elements.customHint.hidden = !card;
+  elements.customEditor.hidden = !card;
+  if (!card) {
+    elements.customRowList.replaceChildren();
+    elements.customCost.value = "";
+    return;
+  }
+
+  elements.customRowList.replaceChildren(...rows.map((text, index) => {
+    const row = document.createElement("li");
+    row.className = "custom-row-item";
+    const remove = Object.assign(document.createElement("button"), {
+      type: "button", className: "ghost-button", textContent: "刪除",
+    });
+    remove.addEventListener("click", () => {
+      editRows((current) => current.filter((_text, other) => other !== index));
+    });
+    row.append(
+      Object.assign(document.createElement("span"), {
+        className: "custom-row-index", textContent: String(index + 1).padStart(2, "0"),
+      }),
+      Object.assign(document.createElement("span"), {
+        className: "custom-row-text", textContent: text,
+      }),
+      remove,
+    );
+    return row;
+  }));
+  elements.customRowEmpty.hidden = rows.length > 0;
+
+  // 花費欄位空白＝自動跟著動作行數走（自動值放在 placeholder）；
+  // 打了數字就是手動指定，之後新增動作也不再自動蓋掉。
+  elements.customCost.placeholder = String(rows.length);
+  if (!card.manualCost && document.activeElement !== elements.customCost) {
+    elements.customCost.value = "";
+  }
+  elements.customConfirm.disabled = !rows.length;
+  elements.customConfirm.textContent = rows.length
+    ? `確定（扣 ${formatPoints(card.cost)} 點）`
+    : "確定";
+}
+
 function syncAssistantQueue(state) {
   const current = state.assistantCurrent || null;
   const currentTarget = current ? itemTarget(state, current) : null;
@@ -1044,9 +1158,13 @@ function buildLedgerRecords(state) {
 
   ledger.filter((entry) => entry.kind === "help").forEach((entry) => {
     const key = entry.key;
-    const [slideIndex, actionIndex] = key.split(":").map(Number);
-    const slide = slides[slideIndex];
-    const action = slide?.actions[actionIndex];
+    // 自訂介入沒有頁次與步驟字母，用合成的 action 與「—／自訂」標示，排序時排到最後。
+    const custom = isCustomKey(key);
+    const [slideIndex, actionIndex] = custom
+      ? [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]
+      : key.split(":").map(Number);
+    const slide = custom ? null : slides[slideIndex];
+    const action = custom ? customAction(state, key) : slide?.actions[actionIndex];
     if (!action) return;
     const helpMode = entry.helpMode || state.helpModes?.[key] || "physical";
     const selected = entry.selectedDetails
@@ -1054,7 +1172,8 @@ function buildLedgerRecords(state) {
     const changes = [{ pool: entry.pool || "assist", delta: entry.delta }];
     if (entry.assistRefund) changes.push({ pool: "assist", delta: entry.assistRefund });
     records.push({
-      key, slideIndex, actionIndex, page: slide.step, step: stepLabel(actionIndex),
+      key, slideIndex, actionIndex,
+      page: custom ? "—" : slide.step, step: custom ? "—" : stepLabel(actionIndex),
       mode: helpMode === "voice_reminder" ? "2. 語音提醒建議"
         : helpMode === "voice" ? "1. 被動 - 語音" : "1. 被動 - 實體",
       modeCode: helpMode === "voice_reminder" ? 2 : 1,
@@ -1219,6 +1338,7 @@ function applyState(state) {
   syncOverlayStatus(state);
   syncPoints(state);
   withFocusKept(() => {
+    syncCustomPanel(state);
     syncAssistantQueue(state);
     syncLedger(state);
   });
@@ -1287,6 +1407,62 @@ elements.assistantStop.addEventListener("click", () => {
   }
   refreshExecutionViews();
 });
+
+// ---- 自訂實體介入 --------------------------------------------------------
+
+// 花費欄位空白＝自動（＝動作行數）；有數字就照打的扣。
+function draftCostInput() {
+  const text = elements.customCost.value.trim();
+  if (!text) return null;
+  const value = Number(text);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+elements.customStart.addEventListener("click", async () => {
+  pendingRows = null;
+  elements.customCost.value = "";
+  const result = await dispatch({ type: "startCustomIntervention" });
+  if (result?.changed === false && !draftKey()) {
+    window.alert("自訂介入沒有建立，請確認連線與 server 狀態（新功能需要重啟 server）。");
+    return;
+  }
+  elements.customRowInput.focus();
+});
+
+elements.customRowForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = elements.customRowInput.value.trim();
+  if (!text || !draftKey()) return;
+  elements.customRowInput.value = "";
+  editRows((rows) => [...rows, text]);
+  elements.customRowInput.focus();
+});
+
+// 動作沒變、只改花費。
+elements.customCost.addEventListener("change", () => editRows((rows) => rows));
+
+elements.customConfirm.addEventListener("click", async () => {
+  const key = draftKey();
+  if (!key || !draftRows().length) return;
+  elements.customConfirm.disabled = true;
+  // 先把可能還沒送出的動作與花費同步過去，再確定；順序反了會用到舊的內容。
+  await editRows((rows) => rows);
+  const result = await dispatch({ type: "confirmCustomIntervention", key });
+  if (result?.changed === false) {
+    window.alert("自訂介入沒有送出，請確認連線與 server 狀態（新功能需要重啟 server）。");
+    elements.customConfirm.disabled = false;
+  }
+});
+
+elements.customCancel.addEventListener("click", () => {
+  const key = draftKey();
+  if (!key) return;
+  if (confirm("確定要放棄這張自訂介入嗎？Client UI 的字卡會收起來，不會扣點。")) {
+    pendingRows = null;
+    dispatch({ type: "cancelCustomIntervention", key });
+  }
+});
+
 document.querySelectorAll("[data-actor-error]").forEach((button) => {
   button.textContent = window.ACTOR_SPEECH.explanation[button.dataset.actorError];
   button.addEventListener("click", () => {

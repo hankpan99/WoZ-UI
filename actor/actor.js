@@ -79,7 +79,7 @@
         empty.textContent = "本次未勾選語音提醒動作。";
         flow.append(empty);
       }
-    } else if (view.kind === "physical" || view.kind === "inquiry" || view.kind === "direct") {
+    } else if (["physical", "custom", "inquiry", "direct"].includes(view.kind)) {
       const at = (when) => view.lines.filter((line) => (line.when || null) === when);
       // 三種實體介入的尾巴都一樣：正在執行 →（完成）／（參與者要求停止）。
       // 詢問後介入只是在前面多一段「先問，接受了才開始執行」。
@@ -133,7 +133,10 @@
     find("intervention-title").textContent = view?.title || "等待介入指令";
     find("step-label").textContent = top?.step || "";
     find("action-name").textContent = top?.name || "";
-    find("action-name").hidden = !top || top.kind === "error";
+    find("action-name").hidden = !top?.name || top.kind === "error";
+    // 自訂介入沒有對應的步驟照片，整塊留給動作清單（CSS 在 client.css）。
+    document.querySelector(".actor-top .help-card-body")
+      .classList.toggle("is-no-image", top?.kind === "custom");
     find("speech-empty").hidden = Boolean(view);
     // 小狀況只跟著介入字卡出現；等待介入的畫面不顯示。
     find("situation-text").textContent = view?.situation || "";

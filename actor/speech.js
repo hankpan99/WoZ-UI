@@ -24,6 +24,12 @@ window.ACTOR_SPEECH = {
     { label: "完成", text: "：步驟已完成" },
     { label: "參與者要求停止", text: "：好的", when: "stop" },
   ],
+  // 自訂實體介入：食譜上沒有的步驟，由控制台現場打字產生，所以沒有步驟字母。
+  custom: [
+    { label: "接收參與者指令", text: "：正在執行自訂步驟" },
+    { label: "完成", text: "：步驟已完成" },
+    { label: "參與者要求停止", text: "：好的", when: "stop" },
+  ],
   inquiry: [
     { label: "詢問參與者", text: "：需要我幫你執行步驟 {step} {partial}嗎？", when: "pending" },
     { label: "參與者接受", text: "：正在執行步驟 {step} {partial}", when: "accepted" },

@@ -39,6 +39,30 @@
         </div>
     </section>
 
+    <section class="panel custom-intervention-panel" aria-label="自訂實體介入">
+      <div class="custom-intervention-head">
+        <h2>自訂實體介入</h2>
+        <button class="ghost-button" id="custom-start" type="button">＋ 新增自訂介入</button>
+        <span class="custom-intervention-hint" id="custom-hint" hidden>編輯中：Client UI 已顯示字卡，按「確定」才會扣點並通知 Actor</span>
+      </div>
+      <div class="custom-editor" id="custom-editor" hidden>
+        <form class="custom-row-form" id="custom-row-form">
+          <input id="custom-row-input" type="text" autocomplete="off"
+                 placeholder="輸入一個動作，按 Enter 新增" data-focus="custom:new" />
+          <button class="ghost-button" type="submit">新增動作</button>
+        </form>
+        <ol class="custom-row-list" id="custom-row-list"></ol>
+        <p class="custom-row-empty" id="custom-row-empty">還沒有動作；至少新增一個才能確定。</p>
+        <div class="custom-editor-foot">
+          <span class="cost-caption">本次花費</span>
+          <input class="cost-input" id="custom-cost" type="number" min="0" step="any" data-focus="custom:cost" />
+          <span class="cost-caption">點</span>
+          <button class="execute-intervention-button" id="custom-confirm" type="button">確定</button>
+          <button class="ghost-button" id="custom-cancel" type="button">取消</button>
+        </div>
+      </div>
+    </section>
+
     <section class="panel assistant-queue-panel" aria-label="助手執行佇列">
       <div class="assistant-queue-now">
         <div class="assistant-queue-head">

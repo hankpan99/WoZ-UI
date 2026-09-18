@@ -52,7 +52,7 @@
 
 body {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr) var(--points-panel-width);
   gap: 12px;
   height: 100vh;
@@ -159,9 +159,41 @@ h2, h3 { margin: 0; }
 .wizard-top { grid-column: 1 / -1; grid-row: 1; }
 .wizard-body { display: contents; }
 .wizard-explanation-panel { grid-column: 1; grid-row: 2; }
-.assistant-queue-panel { grid-column: 1; grid-row: 3; }
-.steps-panel { grid-column: 1; grid-row: 4; }
-.points-panel { grid-column: 2; grid-row: 2 / 5; }
+.custom-intervention-panel { grid-column: 1; grid-row: 3; }
+.assistant-queue-panel { grid-column: 1; grid-row: 4; }
+.steps-panel { grid-column: 1; grid-row: 5; }
+.points-panel { grid-column: 2; grid-row: 2 / 6; }
+
+/* ===== 自訂實體介入：現場打字產生一張說明卡 ===== */
+
+.custom-intervention-panel { grid-template-rows: auto; align-content: start; max-height: 40dvh; overflow-y: auto; scrollbar-width: thin; }
+.custom-intervention-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 9px 14px; }
+.custom-intervention-head h2 { font-size: .98rem; }
+.custom-intervention-hint { min-width: 0; color: var(--helped-badge-text); font-size: .76rem; font-weight: 700; }
+.custom-intervention-hint[hidden] { display: none; }
+.custom-editor { display: grid; gap: 8px; padding: 0 14px 12px; }
+.custom-editor[hidden] { display: none; }
+.custom-row-form { display: flex; gap: 6px; }
+.custom-row-form input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: .9rem;
+}
+.custom-row-form input:focus { border-color: var(--blue); outline: none; }
+.custom-row-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.custom-row-item { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-bg); }
+.custom-row-index { flex-shrink: 0; color: var(--muted); font-size: .8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.custom-row-text { flex: 1 1 auto; min-width: 0; font-size: .9rem; font-weight: 650; overflow-wrap: anywhere; }
+.custom-row-item .ghost-button { flex-shrink: 0; padding: 3px 9px; }
+.custom-row-empty { margin: 0; color: var(--muted); font-size: .82rem; }
+.custom-row-empty[hidden] { display: none; }
+.custom-editor-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.custom-editor-foot .execute-intervention-button { padding: 6px 10px; font-size: .8rem; }
+.custom-editor-foot .ghost-button { padding: 5px 10px; }
 
 /* ===== 助手佇列：左＝正在執行，右＝準備執行 ===== */
 

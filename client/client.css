@@ -504,6 +504,9 @@ button { color: inherit; }
   padding: clamp(18px, 3vh, 30px) clamp(24px, 3vw, 44px);
   overflow: hidden;
 }
+/* 自訂實體介入沒有步驟照片：整張卡都留給動作清單（Actor 也載入這份 CSS）。 */
+.help-card-body.is-no-image { grid-template-columns: minmax(0, 1fr); }
+.help-card-body.is-no-image .help-card-image { display: none; }
 .help-card-image {
   display: grid;
   place-items: center;

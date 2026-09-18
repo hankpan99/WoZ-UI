@@ -95,6 +95,36 @@ assert.equal(situationView({ ...initial, helpOverlay: "0:0", situations: { "0:1"
 assert.equal(situationView({ ...initial, proactiveOverlay: "0:0" }).situation, "沒有攪拌均勻", "主動介入也帶得出來");
 assert.equal(view({ ...initial, helpOverlay: "0:0" }).situation, "", "Excel 沒寫就沒有小狀況");
 
+// 自訂實體介入：內容來自 state.customCards，沒有頁次、步驟字母與照片。
+const customKey = "custom:abc123";
+const customState = {
+  ...initial,
+  customCards: { [customKey]: { rows: ["拿鍋子", "倒水"], cost: 5, status: "confirmed" } },
+  actorOverlay: { key: customKey, proactive: false, mode: "physical", details: [0, 1] },
+};
+const customView = view(customState);
+assert.equal(customView.kind, "custom");
+assert.equal(customView.level, "1");
+assert.equal(customView.title, "實體介入（1. 參與者指揮Alex）");
+assert.equal(customView.step, "自訂步驟");
+assert.equal(customView.name, "", "自訂介入沒有步驟名稱");
+assert.equal(customView.image, "");
+assert.equal(customView.situation, "");
+assert.equal(customView.cost, 5);
+assert.deepEqual(customView.details, [
+  { text: "拿鍋子", selected: true },
+  { text: "倒水", selected: true },
+]);
+assert.deepEqual(customView.lines.map(line => [line.label, line.text, line.active]), [
+  ["接收參與者指令", "：正在執行自訂步驟", true],
+  ["完成", "：步驟已完成", true],
+  ["參與者要求停止", "：好的", false],
+]);
+// 草稿階段 Actor 不會收到 actorOverlay，所以看不到任何東西。
+assert.equal(view({ ...customState, actorOverlay: null }), null);
+// 卡片內容被清掉（例如取消草稿）時不能炸掉。
+assert.equal(view({ ...customState, customCards: {} }), null);
+
 const idle = (state, data = slides) => window.ActorModel.idle(state, data);
 const idleFirst = idle(initial);
 assert.equal(idleFirst.kind, "idle");

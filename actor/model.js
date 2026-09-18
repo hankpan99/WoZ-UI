@@ -1,6 +1,9 @@
 // Actor 與 Client 共用 server 狀態；只產生顯示資料，不送出實驗動作。
 (function () {
-  const { pickedDetails, proactiveDetails, proactiveLevel, proactiveCost } = window.WozFormat;
+  const {
+    pickedDetails, proactiveDetails, proactiveLevel, proactiveCost,
+    CUSTOM_NAME, isCustomKey, customCard,
+  } = window.WozFormat;
   function actionLetter(index) {
     let label = "";
     for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) {
@@ -36,6 +39,27 @@
       details: (action.details || []).map((text) => ({ text, selected: true })),
     };
   }
+  // 自訂實體介入的顯示資料。語句沿用實體介入，只是第一句改成「正在執行自訂步驟」。
+  function custom(state, key, speech) {
+    const card = customCard(state, key);
+    if (!card) return null;
+    return {
+      key, kind: "custom", level: "1", answer: null,
+      cost: card.cost, costLabel: "本次花費", category: "passive",
+      page: null, actionNumber: null, image: "", situation: "",
+      title: "實體介入（1. 參與者指揮Alex）",
+      name: "", step: CUSTOM_NAME,
+      lines: (speech.custom || speech.physical || []).map((line) => ({
+        label: line.label,
+        when: line.when || null,
+        partial: false,
+        // 自訂步驟沒有 {step}／{partial} 要替換，語句就是文件上寫的那一句。
+        text: line.text,
+        active: !line.when,
+      })),
+      details: (card.rows || []).map((text) => ({ text, selected: true })),
+    };
+  }
   function view(state, slides, speech) {
     if (state.actorError) return {
       key: `error:${state.actorError}`, kind: "error", title: "向參與者說明", level: "error",
@@ -56,6 +80,8 @@
     const proactive = Boolean(state.proactiveOverlay);
     const key = state.proactiveOverlay || state.helpOverlay;
     if (!key) return null;
+    // 自訂實體介入：內容來自控制台現場打的字，沒有頁次、步驟字母與照片。
+    if (isCustomKey(key)) return custom(state, key, speech);
     const [pageIndex, actionIndex] = key.split(":").map(Number);
     const slide = slides[pageIndex];
     const action = slide?.actions[actionIndex];
