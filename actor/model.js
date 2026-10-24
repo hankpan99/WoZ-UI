@@ -1,12 +1,64 @@
 // Actor 與 Client 共用 server 狀態；只產生顯示資料，不送出實驗動作。
 (function () {
-  const { pickedDetails, proactiveDetails, proactiveLevel, proactiveCost } = window.WozFormat;
+  const {
+    pickedDetails, proactiveDetails, proactiveLevel, proactiveCost,
+    CUSTOM_NAME, isCustomKey, customCard,
+  } = window.WozFormat;
   function actionLetter(index) {
     let label = "";
     for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) {
       label = String.fromCharCode(65 + (value - 1) % 26) + label;
     }
     return label;
+  }
+  // 沒有介入指令時，Actor 上方要跟 Client 看同一個步驟：
+  // Wizard 有指定預覽步驟就跟著它，否則是本頁第一個還沒完成的步驟（整頁完成就停在最後一步）。
+  function idleKey(state, slides) {
+    if (state.clientViewKey) return state.clientViewKey;
+    const pageIndex = state.currentIndex || 0;
+    const actions = slides[pageIndex]?.actions || [];
+    if (!actions.length) return null;
+    const done = new Set(state.done || []);
+    const index = actions.findIndex((_action, position) => !done.has(`${pageIndex}:${position}`));
+    return `${pageIndex}:${index === -1 ? actions.length - 1 : index}`;
+  }
+  // 只給上方區塊用的顯示資料：沒有語句、沒有花費，純粹讓 Actor 知道參與者正在做哪一步。
+  function idle(state, slides) {
+    const key = idleKey(state, slides);
+    if (!key) return null;
+    const [pageIndex, actionIndex] = key.split(":").map(Number);
+    const slide = slides[pageIndex];
+    const action = slide?.actions[actionIndex];
+    if (!action) return null;
+    return {
+      key: `idle:${key}`, kind: "idle", answer: null, level: "1",
+      page: slide.step, actionNumber: actionIndex + 1, image: slide.image || "",
+      name: action.name,
+      step: `階段 ${slide.step} - 步驟 ${actionLetter(actionIndex)}`,
+      lines: [],
+      details: (action.details || []).map((text) => ({ text, selected: true })),
+    };
+  }
+  // 自訂實體介入的顯示資料。語句沿用實體介入，只是第一句改成「正在執行自訂步驟」。
+  function custom(state, key, speech) {
+    const card = customCard(state, key);
+    if (!card) return null;
+    return {
+      key, kind: "custom", level: "1", answer: null,
+      cost: card.cost, costLabel: "本次花費", category: "passive",
+      page: null, actionNumber: null, image: "", situation: "",
+      title: "實體介入（1. 參與者指揮Alex）",
+      name: "", step: CUSTOM_NAME,
+      lines: (speech.custom || speech.physical || []).map((line) => ({
+        label: line.label,
+        when: line.when || null,
+        partial: false,
+        // 自訂步驟沒有 {step}／{partial} 要替換，語句就是文件上寫的那一句。
+        text: line.text,
+        active: !line.when,
+      })),
+      details: (card.rows || []).map((text) => ({ text, selected: true })),
+    };
   }
   function view(state, slides, speech) {
     if (state.actorError) return {
@@ -28,6 +80,8 @@
     const proactive = Boolean(state.proactiveOverlay);
     const key = state.proactiveOverlay || state.helpOverlay;
     if (!key) return null;
+    // 自訂實體介入：內容來自控制台現場打的字，沒有頁次、步驟字母與照片。
+    if (isCustomKey(key)) return custom(state, key, speech);
     const [pageIndex, actionIndex] = key.split(":").map(Number);
     const slide = slides[pageIndex];
     const action = slide?.actions[actionIndex];
@@ -43,6 +97,9 @@
     };
     const details = action.details || [];
     const picked = new Set(proactive ? proactiveDetails(action) : pickedDetails(state, key, details.length));
+    // 只做這個步驟的一部分（被動＝wizard 的勾選，主動＝Excel「介入」欄的範圍）：
+    // 「正在執行 / 需要我幫你執行」那兩句要多講「的部分動作」。
+    const partial = details.length > 0 && picked.size < details.length;
     const response = proactive ? state.proactive?.[key]?.status || "pending" : null;
     const answer = direct && response === "pending" ? null : response;
     const context = {
@@ -63,6 +120,8 @@
       costLabel: proactive && !state.proactive?.[key]?.status ? "接受將花費" : "本次花費",
       category: proactive || mode === "voice_reminder" ? "proactive" : "passive",
       page: slide.step, actionNumber: actionIndex + 1, image: slide.image || "",
+      // Excel 寫的小狀況，wizard 沒有把這一步關掉才要顯示。
+      situation: state.situations?.[key] === false ? "" : action.situation || "",
       level: proactive ? (direct ? "4" : "3") : (mode === "voice_reminder" ? "2" : "1"),
       title: proactive ? `實體介入（${proactiveLevel(action)}）` : (titles[mode] || titles.physical),
       name: action.name,
@@ -70,12 +129,17 @@
       lines: templates.map((line) => ({
         label: line.label,
         when: line.when || null,
-        text: line.text.replace(/\{(step|action|name|details)\}/g, (_, token) => context[token]),
+        // 有沒有紅字要標；沒有 {partial} 的語句（完成、好的、語音逐條）永遠是 false。
+        partial: partial && line.text.includes("{partial}"),
+        text: line.text
+          .replace(/\{partial\}/g, partial ? speech.partial || "" : "")
+          .replace(/\{(step|action|name|details)\}/g, (_, token) => context[token])
+          .replace(/\s+$/, ""),
         active: direct && answer === "declined" ? line.when === "stop"
           : (!line.when || line.when === answer),
       })),
       details: details.map((text, index) => ({ text, selected: picked.has(index) })),
     };
   }
-  window.ActorModel = { view };
+  window.ActorModel = { view, idle };
 })();

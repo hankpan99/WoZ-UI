@@ -12,6 +12,9 @@ const slides = [{ step: "1", meal: "蛋糕", stage: "製作", actions: [
 ] }];
 const initial = { currentIndex: 0, helpOverlay: null, proactiveOverlay: null, helpModes: {}, helpDetails: {}, proactive: {} };
 const view = (state, data = slides) => window.ActorModel.view(state, data, window.ACTOR_SPEECH);
+// 語句樣板換掉代號之後應該長的樣子；partial 是「的部分動作」，全部都做時是空字串。
+const say = (template, step, partial = "") =>
+  template.replace("{step}", step).replace("{partial}", partial).replace(/\s+$/, "");
 assert.equal(view(initial), null);
 assert.equal(view({ ...initial, actorOverlay: null, helpOverlay: "0:0" }), null);
 assert.equal(view({ ...initial, actorOverlay: { key: "0:0", proactive: false, mode: "voice_reminder", details: [1] } }).kind, "voice_reminder");
@@ -48,7 +51,7 @@ assert.deepEqual(toggled.lines.map(line => [line.label, line.text]), [["動作 0
 assert.deepEqual(toggled.details.map(detail => detail.selected), [true, false]);
 assert.deepEqual(view({ ...reminderState, helpDetails: { "0:0": [] } }).lines, []);
 assert.equal(view({ ...reminderState, helpDetails: {} }).lines.length, 2);
-assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].text, window.ACTOR_SPEECH.physical[0].text.replace("{step}", "A"));
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].text, say(window.ACTOR_SPEECH.physical[0].text, "A"));
 const inquiry = { ...initial, proactiveOverlay: "0:0", helpDetails: { "0:0": [0] } };
 assert.deepEqual(view(inquiry).lines.map(x => x.active), [true, false, false, false]);
 assert.deepEqual(view(inquiry).details.map(x => x.selected), [false, true], "Proactive scope comes from Excel");
@@ -64,7 +67,77 @@ const executed = view({ ...initial, helpOverlay: "0:0", helped: { "0:0": 2 } });
 assert.equal(executed.cost, 2);
 assert.equal(executed.costLabel, "本次花費");
 assert.equal(direct.answer, null, "Direct intervention does not wait for permission");
-assert.equal(direct.lines[0].text, window.ACTOR_SPEECH.direct[0].text.replace("{step}", "B"));
+assert.equal(direct.lines[0].text, say(window.ACTOR_SPEECH.direct[0].text, "B"));
 assert.deepEqual(view({ ...initial, proactiveOverlay: "0:1", proactive: { "0:1": { status: "declined" } } }).lines.map(x => x.active), [false, false, true]);
 assert.equal(view({ ...voiceState, currentIndex: 99 }).name, "攪拌", "Read the overlay's page, not the browsed page");
-console.log("Actor model checks passed: voice, physical, inquiry, direct, selections, waiting, and no state mutation");
+const mark = window.ACTOR_SPEECH.partial;
+const partialHelp = view({ ...initial, helpOverlay: "0:0", helpDetails: { "0:0": [0] } });
+assert.equal(partialHelp.lines[0].text, say(window.ACTOR_SPEECH.physical[0].text, "A", mark));
+assert.deepEqual(partialHelp.lines.map(x => x.partial), [true, false, false], "Only 執行/詢問 says 的部分動作");
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).lines[0].partial, false, "All details picked is the whole step");
+assert.ok(!view({ ...initial, helpOverlay: "0:0" }).lines[0].text.includes(mark));
+assert.deepEqual(view(inquiry).lines.map(x => x.partial), [true, true, false, false], "Proactive scope comes from Excel");
+assert.equal(view(inquiry).lines[0].text, say(window.ACTOR_SPEECH.inquiry[0].text, "A", mark));
+assert.equal(direct.lines[0].partial, false, "0:1 marks its only detail, so it is the whole step");
+assert.deepEqual(view({ ...voiceState, helpDetails: { "0:0": [1] } }).lines.map(x => x.partial), [false], "Voice lines have no {partial}");
+
+// Excel「小狀況」：wizard 沒關掉就跟著字卡出現。
+const situationSlides = [{ step: "1", meal: "蛋糕", stage: "製作", actions: [
+  { ...slides[0].actions[0], situation: "沒有攪拌均勻" },
+  slides[0].actions[1],
+] }];
+const situationView = (state) => view(state, situationSlides);
+assert.equal(situationView({ ...initial, helpOverlay: "0:0" }).situation, "沒有攪拌均勻");
+assert.equal(situationView({ ...initial, helpOverlay: "0:0", situations: { "0:0": false } }).situation, "",
+  "Wizard 關掉這一步就不顯示");
+assert.equal(situationView({ ...initial, helpOverlay: "0:0", situations: { "0:1": false } }).situation, "沒有攪拌均勻",
+  "關掉的是別的步驟");
+assert.equal(situationView({ ...initial, proactiveOverlay: "0:0" }).situation, "沒有攪拌均勻", "主動介入也帶得出來");
+assert.equal(view({ ...initial, helpOverlay: "0:0" }).situation, "", "Excel 沒寫就沒有小狀況");
+
+// 自訂實體介入：內容來自 state.customCards，沒有頁次、步驟字母與照片。
+const customKey = "custom:abc123";
+const customState = {
+  ...initial,
+  customCards: { [customKey]: { rows: ["拿鍋子", "倒水"], cost: 5, status: "confirmed" } },
+  actorOverlay: { key: customKey, proactive: false, mode: "physical", details: [0, 1] },
+};
+const customView = view(customState);
+assert.equal(customView.kind, "custom");
+assert.equal(customView.level, "1");
+assert.equal(customView.title, "實體介入（1. 參與者指揮Alex）");
+assert.equal(customView.step, "自訂步驟");
+assert.equal(customView.name, "", "自訂介入沒有步驟名稱");
+assert.equal(customView.image, "");
+assert.equal(customView.situation, "");
+assert.equal(customView.cost, 5);
+assert.deepEqual(customView.details, [
+  { text: "拿鍋子", selected: true },
+  { text: "倒水", selected: true },
+]);
+assert.deepEqual(customView.lines.map(line => [line.label, line.text, line.active]), [
+  ["接收參與者指令", "：正在執行自訂步驟", true],
+  ["完成", "：步驟已完成", true],
+  ["參與者要求停止", "：好的", false],
+]);
+// 草稿階段 Actor 不會收到 actorOverlay，所以看不到任何東西。
+assert.equal(view({ ...customState, actorOverlay: null }), null);
+// 卡片內容被清掉（例如取消草稿）時不能炸掉。
+assert.equal(view({ ...customState, customCards: {} }), null);
+
+const idle = (state, data = slides) => window.ActorModel.idle(state, data);
+const idleFirst = idle(initial);
+assert.equal(idleFirst.kind, "idle");
+assert.equal(idleFirst.name, "攪拌");
+assert.equal(idleFirst.step, "階段 1 - 步驟 A");
+assert.equal(idleFirst.actionNumber, 1);
+assert.deepEqual(idleFirst.details.map(detail => detail.text), ["拿碗", "攪拌均勻"]);
+assert.deepEqual(idleFirst.details.map(detail => detail.selected), [true, true], "Idle preview never greys out details");
+assert.deepEqual(idleFirst.lines, []);
+assert.equal(idle({ ...initial, done: ["0:0"] }).name, "烘烤", "Idle preview follows the first unfinished step");
+assert.equal(idle({ ...initial, done: ["0:0", "0:1"] }).name, "烘烤", "A finished page stays on its last step");
+assert.equal(idle({ ...initial, done: ["0:0"], clientViewKey: "0:0" }).name, "攪拌", "Wizard's preview wins over progress");
+assert.equal(idle({ ...initial, currentIndex: 99 }), null);
+assert.equal(idle({ ...initial, clientViewKey: "99:0" }), null);
+assert.equal(idle(initial, [{ step: "1", actions: [] }]), null);
+console.log("Actor model checks passed: voice, physical, inquiry, direct, selections, waiting, partial scope, idle preview, and no state mutation");

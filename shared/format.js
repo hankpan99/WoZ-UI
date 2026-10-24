@@ -64,10 +64,23 @@
     return Math.min(marks, price);
   };
 
+  // ---- 自訂實體介入 ------------------------------------------------------
+  // Excel 上沒有的步驟，由 wizard 現場打字產生。key 是合成的 "custom:<id>"，
+  // 內容在 state.customCards，不能拿去查 RECIPE_SLIDES。
+
+  const CUSTOM_PREFIX = "custom:";
+  // 卡片右上角與佇列／紀錄上顯示的名稱（取代「階段 X - 步驟 Y」）。
+  const CUSTOM_NAME = "自訂步驟";
+  const isCustomKey = (key) => typeof key === "string" && key.startsWith(CUSTOM_PREFIX);
+  const customCard = (state, key) =>
+    (isCustomKey(key) ? (state?.customCards || {})[key] : null) || null;
+  const customRows = (state, key) => customCard(state, key)?.rows || [];
+
   // ---- 助手佇列 ----------------------------------------------------------
 
   // 修正「實際做過的動作」後的花費。server/state.py 的 _executed_cost() 鏡像。
   // 全部做完＝原本的花費；否則＝min(做了幾條, Excel 原價, 原本的花費)。
+  // 自訂介入的原價＝動作行數（合成的 action 已經把 cost 設成行數）。
   const executedCost = (action, executedCount, baseCount, original) => {
     if (!executedCount && baseCount) return 0;
     if (executedCount === baseCount) return original;
@@ -93,5 +106,6 @@
     actionKey, formatPoints, formatDelta, cleanLabel, formatTime, slideCost,
     pickedDetails, helpCost, proactiveDetails, proactiveLevel, proactiveCost,
     assistantItems, helpOverlayEntry, executedCost,
+    CUSTOM_PREFIX, CUSTOM_NAME, isCustomKey, customCard, customRows,
   };
 })();

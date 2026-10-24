@@ -1,7 +1,7 @@
 :root {
   /* 上方提示卡 / 下方語句高度比例；上方包含標頭、圖片與詳細步驟。 */
-  --actor-top-height: 60fr;
-  --actor-bottom-height: 40fr;
+  --actor-top-height: 58fr;
+  --actor-bottom-height: 42fr;
   /* 介入大標題：預設跟隨 Client 提示卡（一般螢幕 2.5rem）。 */
   --actor-title-size: var(--help-card-title-size);
   /* 步驟名稱、語句、語句時機標籤的字級。 */
@@ -11,6 +11,12 @@
   /* 模式 2 每欄最小寬度；調小可在同一排放更多欄。 */
   --actor-reminder-column-width: 22rem;
   --actor-detail-size: var(--help-card-item-size);
+  /* 等待介入且有目前步驟預覽時的大標題字級（比純等待畫面小一些）。 */
+  --actor-idle-preview-title-size: clamp(2rem, 3vw, 3rem);
+  /* 只做部分動作時，語句裡「的部分動作」那幾個字的顏色；小狀況橫幅也用這個色。 */
+  --actor-partial-color: #c62828;
+  /* 下方「小狀況」橫幅的字級。 */
+  --actor-situation-size: clamp(1.6rem, 2.3vw, 2.4rem);
 }
 body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: var(--soft); }
 .actor-shell { height: 100%; display: grid; grid-template-rows: minmax(0, var(--actor-top-height)) minmax(0, var(--actor-bottom-height)); gap: 16px; }
@@ -23,7 +29,9 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .actor-shell.is-idle .help-card-name { font-size: clamp(3rem, 4.5vw, 4.5rem); white-space: normal; }
 #speech-empty { margin: 0; text-align: center; color: #555; font-size: clamp(2.5rem, 4vw, 4rem); font-weight: 750; line-height: 1.35; }
 .actor-shell.is-idle #speech-lines { display: none; }
-.actor-shell.is-idle .help-card-image { display: none; }
+.actor-shell.is-idle:not(.has-idle-preview) .help-card-image { display: none; }
+/* 等待介入時若同時顯示目前步驟預覽，標題讓一點空間給圖片與詳細動作。 */
+.actor-shell.is-idle.has-idle-preview .help-card-name { font-size: var(--actor-idle-preview-title-size); }
 .actor-shell.is-error { --helped-border: #cf5b5b; --helped-bg: #f3baba; --helped-badge-text: #9b2020; }
 .actor-shell.is-error .help-card-body { display: none; }
 .actor-shell.is-error .help-card-name { font-size: clamp(3rem, 4.5vw, 4.5rem); }
@@ -34,7 +42,11 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 #fullscreen-button:active { transform: translateY(0); }
 #fullscreen-button:focus-visible { outline: 3px solid var(--helped-border); outline-offset: 3px; }
 .actor-speech { min-height: 0; overflow-y: auto; padding: 18px 24px; }
-.actor-bottom { display: grid; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.actor-bottom { display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+/* Excel「小狀況」：要請 Alex 故意做出的小失誤，沒有的時候整條不佔位。 */
+.actor-situation { display: flex; align-items: center; gap: 14px; margin: 0; padding: 12px 24px; border-bottom: 2px solid var(--actor-partial-color); background: #fdecec; color: var(--actor-partial-color); font-size: var(--actor-situation-size); font-weight: 750; line-height: 1.3; overflow-wrap: anywhere; }
+.actor-situation[hidden] { display: none; }
+.actor-situation-label { flex-shrink: 0; padding: 4px 14px; border-radius: 99px; background: var(--actor-partial-color); color: var(--white); font-size: .8em; font-weight: 800; }
 .actor-top .help-card-body { grid-template-rows: minmax(0, 1fr); min-width: 0; }
 /* 圖片不參與容器的固有高度計算，始終完整縮放在提示卡範圍內。 */
 .actor-top .help-card-image { position: relative; align-self: stretch; height: auto; }
@@ -50,6 +62,10 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .flow-branches { display: flex; flex: 0 1 auto; flex-direction: column; gap: 16px; min-width: 0; padding-left: 28px; border-left: 2px solid var(--line); }
 .flow-branch { position: relative; }
 .flow-branch::before { content: "→"; position: absolute; left: -27px; color: var(--helped-badge-text); font-size: 1.7rem; }
+/* 主線後面還要再分叉的那一段（例：接受 → 正在執行 →（完成）／（要求停止））。 */
+.flow-split { position: relative; display: flex; align-items: center; gap: 28px; min-width: 0; max-width: 100%; }
+.flow-split::before { top: 50%; transform: translateY(-50%); }
+.speech-partial { color: var(--actor-partial-color); }
 .flow-arrow { flex-shrink: 0; color: var(--helped-badge-text); font-size: 1.8rem; }
 .speech-line { margin: 0; }
 .flow-card { flex: 0 1 auto; width: max-content; max-width: min(36rem, 100%); min-width: 0; padding: 18px 22px; border: 2px solid var(--helped-border); border-radius: 16px; background: var(--helped-bg); }
@@ -66,7 +82,7 @@ body { margin: 0; padding: 16px; height: 100dvh; overflow: hidden; background: v
 .speech-line.is-inactive { border-style: dashed; background: var(--panel-bg); }
 .speech-line.is-inactive dd { opacity: .65; }
 @media (max-width: 900px) {
-  .speech-flow { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .speech-flow, .flow-split { flex-direction: column; align-items: flex-start; gap: 16px; }
   .flow-branches { flex: auto; }
   .flow-sequence { flex-wrap: wrap; }
 }

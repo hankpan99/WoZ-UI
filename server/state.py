@@ -15,7 +15,7 @@ RECIPE_DATA = PROJECT_ROOT / "data" / "recipe-data.js"
 # 參與者的總預算（原本 app.js 的 STARTING_POINTS）。
 # 兩個池加起來就是這個數字：主動幫助池的總額由 Excel 的「介入」欄決定，
 # 剩下的才是可指揮助手池（見下面的 TOTAL_POINTS）。
-TOTAL_BUDGET = 200
+TOTAL_BUDGET = 240
 # 讀不到 data/recipe-data.js 時的頁數 fallback。
 FALLBACK_SLIDE_COUNT = 20
 
@@ -72,6 +72,12 @@ def action_details(key):
     return list(action.get("details") or []) if action else []
 
 
+def action_situation(key):
+    """Excel「小狀況」欄：這個步驟要請 Alex 故意做出的小失誤，沒有就回 ""。"""
+    action = _action_at(key)
+    return (action.get("situation") or "") if action else ""
+
+
 def action_proactive(key):
     """助手主動提議時要代勞的詳細步驟索引（Excel「介入」欄標 O 的那幾條）。
 
@@ -120,6 +126,27 @@ def proactive_total():
     )
 
 
+# ---- 自訂實體介入 ----------------------------------------------------------
+# Excel 上沒有的步驟，由 wizard 現場打字產生。key 用合成的 "custom:<id>"，
+# 這樣 helpOverlay / assistantQueue / ledger 的既有規則全部可以照用，
+# 只有「查 Excel」的那幾個地方要改成查 state["customCards"]。
+CUSTOM_PREFIX = "custom:"
+
+
+def is_custom_key(key):
+    return isinstance(key, str) and key.startswith(CUSTOM_PREFIX)
+
+
+def custom_card(state, key):
+    if not is_custom_key(key):
+        return None
+    return (state.get("customCards") or {}).get(key)
+
+
+def custom_rows(state, key):
+    return list((custom_card(state, key) or {}).get("rows") or [])
+
+
 def default_state():
     return {
         "version": 0,
@@ -131,6 +158,13 @@ def default_state():
         "supportedHelpModes": ["physical", "voice", "voice_reminder"],
         # key -> 這次要代勞的詳細步驟索引。沒有紀錄＝全部勾選（見 selected_details）。
         "helpDetails": {},
+        # Excel 有寫「小狀況」的步驟，這次要不要請 Alex 照做。沒有紀錄＝要（預設開）。
+        "situations": {},
+        # 自訂實體介入的卡片內容。
+        # "custom:<id>" -> {"rows": [str], "cost": n, "manualCost": bool, "status": "draft"|"confirmed"}
+        "customCards": {},
+        # 正在編輯（還沒按確定）的那一張自訂卡片，或 None。同時只會有一張。
+        "customDraft": None,
         # client 上正在顯示的整頁說明卡，或 None。
         "helpOverlay": None,
         "actorOverlay": None,
@@ -295,6 +329,27 @@ def _close_overlay_for(state, keys):
         state["proactiveOverlay"] = None
 
 
+def _close_actor_overlay_for(state, key):
+    """執行結束（完成／喊停）時把 Actor UI 的卡片一起收掉，等同 wizard 按「關閉 Actor UI 顯示」。
+    只收這一步自己的那一張：執行期間 wizard 可能已經另外叫出別的步驟的卡片，
+    那張還在等參與者回應，不能被上一步的收尾誤關。
+    actorError 是 wizard 另外叫出的說明畫面，維持只能手動關掉。"""
+    if (state.get("actorOverlay") or {}).get("key") == key:
+        state["actorOverlay"] = None
+
+
+def _discard_draft(state):
+    """丟掉還沒按確定的自訂卡片；它沒有帳目也沒有佇列項目，直接刪掉即可。"""
+    key = state.get("customDraft")
+    if not key:
+        return False
+    (state.get("customCards") or {}).pop(key, None)
+    state["customDraft"] = None
+    _close_overlay_for(state, {key})
+    _close_actor_overlay_for(state, key)
+    return True
+
+
 def _drop_proactive_entries(state, key):
     """把某個步驟的主動提議帳目全部拿掉（「接受」1 筆、「不接受」2 筆）。"""
     state["ledger"] = [
@@ -407,14 +462,16 @@ def execution_status(state, entry_id=None, proactive_key=None):
     return amended or "completed"
 
 
-def _executed_cost(key, executed, base, original):
+def _executed_cost(key, executed, base, original, price=None):
     """修正後的花費：規則與 help_cost() 相同。
-    全部做完＝原本的花費；否則＝min(做了幾條, Excel 原價, 原本的花費)。"""
+    全部做完＝原本的花費；否則＝min(做了幾條, Excel 原價, 原本的花費)。
+    price＝原價的來源；自訂介入沒有 Excel 資料，由呼叫端傳進來。"""
     if not executed and base:
         return 0
     if len(executed) == len(base):
         return _to_number(original)
-    return _to_number(min(len(executed), action_cost(key), original))
+    price = action_cost(key) if price is None else price
+    return _to_number(min(len(executed), price, original))
 
 
 def _executed_status(executed, base, cost):
@@ -427,13 +484,14 @@ def _executed_status(executed, base, cost):
 
 def _amend_help(state, entry, details, cost=None, status=None):
     key = entry.get("key")
-    total = len(action_details(key))
+    custom = is_custom_key(key)
+    total = len(custom_rows(state, key)) if custom else len(action_details(key))
     base = entry.get("selectedDetails")
     if base is None:
         base = list(range(total))
     original = _to_number(entry.get("originalCost", -entry["delta"]))
     executed = sorted({index for index in details if index in set(base)})
-    auto = _executed_cost(key, executed, base, original)
+    auto = _executed_cost(key, executed, base, original, total if custom else None)
     cost = auto if cost is None else _to_number(cost, auto)
     if cost < 0:
         return False
@@ -509,6 +567,84 @@ def apply_action(state, action):
         if message:
             state["actorOverlay"] = None
 
+    elif kind == "startCustomIntervention":
+        # 開一張空白的自訂卡片。打字階段只有 Client 看得到，Actor 要等按下確定。
+        if state.get("customDraft"):
+            return state, False
+        key = f"{CUSTOM_PREFIX}{uuid.uuid4().hex}"
+        state.setdefault("customCards", {})[key] = {
+            "rows": [], "cost": 0, "manualCost": False, "status": "draft",
+        }
+        state["customDraft"] = key
+        state["helpOverlay"] = key
+        state["helpOverlayItem"] = None
+        state["proactiveOverlay"] = None
+        state["actorOverlay"] = None
+
+    elif kind in ("updateCustomIntervention", "confirmCustomIntervention",
+                  "cancelCustomIntervention"):
+        key = action.get("key")
+        card = custom_card(state, key)
+        # 只有還沒確定的那一張可以改；確定後的卡片內容就凍結了（帳目已經成立）。
+        if not card or card.get("status") != "draft" or state.get("customDraft") != key:
+            return state, False
+
+        if kind == "cancelCustomIntervention":
+            _discard_draft(state)
+
+        elif kind == "updateCustomIntervention":
+            rows = action.get("rows")
+            if rows is None:
+                rows = card["rows"]
+            elif not isinstance(rows, list):
+                return state, False
+            else:
+                rows = [text.strip() for text in rows if isinstance(text, str) and text.strip()]
+            cost = action.get("cost")
+            manual = cost is not None
+            if manual:
+                if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost < 0:
+                    return state, False
+                cost = _to_number(cost)
+            else:
+                # 沒指定就自動計價：一條動作一點，與 Excel 步驟的計價方式一致。
+                cost = len(rows)
+            if rows == card["rows"] and cost == card["cost"] and manual == card.get("manualCost"):
+                return state, False
+            card.update({"rows": rows, "cost": cost, "manualCost": manual})
+
+        else:  # confirmCustomIntervention
+            if not card["rows"]:
+                return state, False
+            cost = _to_number(card["cost"])
+            card["status"] = "confirmed"
+            state["customDraft"] = None
+            run = 1 + sum(item["kind"] == "help" and is_custom_key(item.get("key"))
+                          for item in state["ledger"])
+            entry = _entry("help", -cost, f"自訂步驟（{len(card['rows'])} 個動作）",
+                           key, ASSIST_POOL)
+            entry.update({"helpMode": "physical", "selectedDetails": list(range(len(card["rows"]))),
+                          "run": run, "interventionType": "passive", "custom": True})
+            state["ledger"].append(entry)
+            state["helped"][key] = cost
+            state.setdefault("helpModes", {})[key] = "physical"
+            item = _new_item(key, "help", "physical", entry["id"])
+            state["assistantQueue"].append(item)
+            # 確定之後 Client 的卡片繼續開著，Actor 這時才跳出來。
+            state["helpOverlay"] = key
+            state["helpOverlayItem"] = item["id"]
+            _show_actor_overlay(state, key, entry=entry)
+
+    elif kind == "setSituation":
+        # Excel 寫了小狀況的步驟才有這個開關；預設是開，關掉這次就照正常做。
+        key = action.get("key")
+        if not isinstance(key, str) or not action_situation(key):
+            return state, False
+        value = bool(action.get("value"))
+        if state.setdefault("situations", {}).get(key, True) == value:
+            return state, False
+        state["situations"][key] = value
+
     elif kind == "closeActorOverlay":
         if not state.get("actorOverlay") and not state.get("actorError"):
             return state, False
@@ -548,8 +684,11 @@ def apply_action(state, action):
         if not current:
             return state, False
         key = current["key"]
-        state["done"] = sorted(set(state["done"]) | {key}, key=_key_order)
+        # 自訂介入不對應 Excel 的任何一步，不能寫進 done（那是 Client 的步驟勾選）。
+        if not is_custom_key(key):
+            state["done"] = sorted(set(state["done"]) | {key}, key=_key_order)
         _close_overlay_for(state, {key})
+        _close_actor_overlay_for(state, key)
         state["assistantCurrent"] = None
 
     elif kind == "setDoneBulk":
@@ -631,6 +770,10 @@ def apply_action(state, action):
             state["helpOverlay"] = None
 
     elif kind == "setHelpOverlay":
+        # 關掉還在編輯中的自訂卡片＝放棄這張草稿（沒有帳目也沒有佇列項目，直接丟掉）。
+        discarded = (not action.get("key") and state.get("customDraft")
+                     and state["customDraft"] == state["helpOverlay"]
+                     and _discard_draft(state))
         # 只有已經扣過點的步驟才叫得出說明卡；None＝關掉。
         key = action.get("key")
         key = key if isinstance(key, str) and key in state["helped"] else None
@@ -645,7 +788,8 @@ def apply_action(state, action):
                     None,
                 )
             item_id = item["id"] if item else None
-        if (key == state["helpOverlay"] and item_id == state.get("helpOverlayItem")
+        if (not discarded and key == state["helpOverlay"]
+                and item_id == state.get("helpOverlayItem")
                 and (not key or state.get("actorOverlay") and not state.get("actorError"))):
             return state, False
         if key:
@@ -784,6 +928,7 @@ def apply_action(state, action):
                 return state, False
         elif not _amend_proactive(state, current["key"], details, cost):
             return state, False
+        _close_actor_overlay_for(state, current["key"])
         state["assistantCurrent"] = None
 
     elif kind == "cancelQueued":
@@ -869,6 +1014,12 @@ def _export_step_label(index):
 
 
 def _export_location(key):
+    if is_custom_key(key):
+        # 自訂介入不屬於任何一頁；頁次留空，排序時會被推到最後面。
+        return {
+            "key": key, "pageIndex": None, "page": None,
+            "stepIndex": None, "step": "自訂", "action": "自訂步驟",
+        }
     try:
         slide_index, action_index = (int(part) for part in key.split(":"))
         slide = SLIDES[slide_index]
@@ -885,8 +1036,8 @@ def _export_location(key):
     }
 
 
-def _export_selection(key, picked):
-    details = action_details(key)
+def _export_selection(state, key, picked):
+    details = custom_rows(state, key) if is_custom_key(key) else action_details(key)
     selected = set(picked)
     items = [
         {"index": index + 1, "text": text}
@@ -945,11 +1096,11 @@ def export_payload(state):
             "cost": cost,
             "timestamp": entry.get("ts"),
             "pointChanges": changes,
-            **_export_selection(key, selected),
+            **_export_selection(state, key, selected),
             "executionStatus": execution_status(state, entry_id=entry.get("id")),
             "originalCost": entry.get("originalCost", cost),
             "executedCost": entry.get("executedCost", entry.get("originalCost", cost)),
-            "executedActions": _export_selection(key, executed)["selectedActions"],
+            "executedActions": _export_selection(state, key, executed)["selectedActions"],
         })
 
     for key, result in (state.get("proactive") or {}).items():
@@ -973,12 +1124,12 @@ def export_payload(state):
             "cost": cost,
             "timestamp": timestamp("proactive", key),
             "pointChanges": changes,
-            **_export_selection(key, action_proactive(key)),
+            **_export_selection(state, key, action_proactive(key)),
             "executionStatus": execution_status(state, proactive_key=key) if accepted else None,
             "originalCost": cost,
             "executedCost": executed_cost if accepted else 0,
             "executedActions": _export_selection(
-                key, result.get("executedDetails", action_proactive(key)) if accepted else [],
+                state, key, result.get("executedDetails", action_proactive(key)) if accepted else [],
             )["selectedActions"],
         })
 

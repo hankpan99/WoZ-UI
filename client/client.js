@@ -38,7 +38,7 @@ const MAX_QUEUE_ITEMS = 3;
 const QUEUE_LEVELS = { physical: "1", voice: "1", voice_reminder: "2", inquiry: "3", direct: "4" };
 const {
   actionKey, formatPoints, cleanLabel, pickedDetails, proactiveDetails, proactiveLevel, proactiveCost,
-  helpOverlayEntry,
+  helpOverlayEntry, CUSTOM_NAME, isCustomKey, customCard,
 } = window.WozFormat;
 
 // Client 右側主步驟使用英文字母編號：A, B, ... Z, AA, AB ...。
@@ -78,6 +78,7 @@ const elements = {
   helpOverlay: document.querySelector("#help-overlay"),
   helpCard: document.querySelector("#help-overlay .help-card"),
   helpOverlayBody: document.querySelector("#help-overlay-body"),
+  helpCardBody: document.querySelector("#help-overlay .help-card-body"),
   helpOverlayStep: document.querySelector("#help-overlay-step"),
   helpOverlayAnswer: document.querySelector("#help-overlay-answer"),
   helpOverlayName: document.querySelector("#help-overlay-name"),
@@ -585,6 +586,40 @@ function proactiveNotificationKey(state) {
   return `reminder:${key}:${entry?.id || entry?.run || ""}`;
 }
 
+// 自訂實體介入的說明卡：wizard 現場打的動作，一邊打一邊出現在這裡。
+// 與一般說明卡共用同一塊 DOM，差別是沒有步驟名稱、沒有照片，右上角寫「自訂步驟」。
+function showCustomOverlay(state, key) {
+  const card = customCard(state, key);
+  overlayKey = card ? key : null;
+  elements.helpOverlay.hidden = !overlayKey;
+  if (!overlayKey) return;
+
+  const rows = card.rows || [];
+  elements.helpOverlay.dataset.mode = "assist";
+  elements.helpOverlay.dataset.interventionLevel = "1";
+  updateHelpCardWidth(rows.length);
+
+  elements.helpOverlayStep.textContent = CUSTOM_NAME;
+  elements.helpOverlayName.textContent = "實體介入（1. 由您指揮Alex）";
+  elements.helpOverlayAction.hidden = true;
+  elements.helpOverlayAnswer.hidden = true;
+  elements.helpCardBody.classList.add("is-no-image");
+
+  elements.helpOverlayList.replaceChildren(...rows.map((text) => {
+    const item = document.createElement("li");
+    item.textContent = text;
+    return item;
+  }));
+  // 剛開卡還沒打字時就讓清單留白，不要跳「這個步驟沒有更細的動作」。
+  elements.helpOverlayEmpty.hidden = true;
+  // 自訂卡片的動作全部由助手做，沒有灰字，也就不需要圖例。
+  elements.helpOverlayLegend.hidden = true;
+
+  elements.helpOverlayCostLabel.textContent = "本次花費";
+  elements.helpOverlayCost.textContent = formatPoints(card.cost ?? 0);
+  fitHelpColumns();
+}
+
 // 整頁的卡片有兩種，共用同一塊 DOM（畫面上同時只會有一張，server 保證互斥）：
 //   assist    ＝ wizard 勾「接受幫助」時浮出來的說明卡，代勞範圍由控制台的勾選決定。
 //   proactive ＝ 模式 2 語音提醒建議，以及模式 3、4 主動實體介入。
@@ -599,6 +634,11 @@ function syncHelpOverlay(state) {
   lastProactiveNotificationKey = notificationKey;
   hasReceivedOverlayState = true;
   const key = proactiveKey || state.helpOverlay || null;
+  // 自訂介入的內容不在食譜裡，也沒有頁次、步驟字母與照片，走自己的畫法。
+  if (isCustomKey(key)) {
+    showCustomOverlay(state, key);
+    return;
+  }
   const entry = proactiveKey ? null : helpOverlayEntry(state);
   const helpMode = entry?.helpMode || state.helpModes?.[key] || "physical";
   const isReminder = !proactiveKey && helpMode === "voice_reminder";
@@ -639,6 +679,8 @@ function syncHelpOverlay(state) {
   // 介入種類與觸發方式合併成單一標題；動作名稱獨立放在下一行。
   elements.helpOverlayName.textContent = overlayTitle;
   elements.helpOverlayAction.textContent = action.name;
+  elements.helpOverlayAction.hidden = false;
+  elements.helpCardBody.classList.remove("is-no-image");
   showHelpImage(slideIndex, actionIndex);
 
   // 提議被回答之後就把結果標在卡片上，wizard 收卡前參與者都看得到。
@@ -685,6 +727,10 @@ function syncHelpOverlay(state) {
 
 // 佇列項目不一定在目前這一頁，所以一律從 key 反查。
 function assistantItemLabel(item, withName) {
+  if (isCustomKey(item.key)) {
+    const rows = customCard(window.WozStore.state, item.key)?.rows || [];
+    return withName ? `${CUSTOM_NAME} - ${rows.length} 個動作` : CUSTOM_NAME;
+  }
   const [slideIndex, actionIndex] = item.key.split(":").map(Number);
   const slide = slides[slideIndex];
   const action = slide?.actions[actionIndex];
